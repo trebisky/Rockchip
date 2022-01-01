@@ -1,14 +1,8 @@
-This is my first bit of "bare metal" code for the Rockchip RK3399.
-It is loaded by U-boot and so is not truly "bare metal" and
-in fact it relies on the uart initialization already done
-by U-boot.  The goal is to get something (anything!) to run
-with the least amount of code possible!
+This is my second "bare metal" project for the Rockchip RK3399.
 
-Tom Trebisky  12-31-2021
+The game here is to blink the on board LED.
 
-This program prints "hello" endlessly on the serial port.
+Tom Trebisky  1-1-2022
 
-The starting point for this was my Bitcoin Miner (EBAZ4205)
-archive, project "fish".
-
-This was derived from my Orange Pi Github archive, project "h5_hello".
+This LED should be green and the schematic shows it as
+"GPIO0_B5" or "LED1_OUT".

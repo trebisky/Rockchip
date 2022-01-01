@@ -9,3 +9,4 @@ http://cholla.mmto.org/orange_pi/rockchip/
 Here are the projects you will find here:
 
 * hello - a simple "do something" first project.
+* blink - use the GPIO to blink the LED.
