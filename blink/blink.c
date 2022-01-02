@@ -74,6 +74,9 @@ struct rock_uart {
 #define ST_RF		BIT(4)
 
 /* The TRM describes the GPIO in chapter 20
+ *
+ * The on chip LED is connected to a signal GPIO0_B5
+ * according to the schematic.
  */
 
 struct rock_gpio {
@@ -140,10 +143,8 @@ puts ( char *s )
 int limit = 500;
 
 void
-main ( void )
+talker ( void )
 {
-	uart_init();
-
 	if ( ! limit ) {
 	    for ( ;; )
 		puts ( "hello " );
@@ -151,6 +152,79 @@ main ( void )
 	    for ( ;limit--; )
 		puts ( "hello " );
 	}
+}
+
+/* This might give about a 1 second delay */
+void
+delay ( void )
+{
+        volatile int count = 100000000;
+
+        while ( count-- )
+            ;
+}
+
+/* This works, but manipulates all 32 bits.
+ * setting the direction to output (1) is essential
+ */
+void
+blinker_BRUTE ( void )
+{
+	struct rock_gpio *gp = GPIO_BASE;
+
+	gp->dir = 0xffffffff;
+
+	for ( ;; ) {
+	    puts ( "on\n" );
+	    gp->data = 0xffffffff;
+	    delay ();
+	    puts ( "off\n" );
+	    gp->data = 0;
+	    delay ();
+	}
+}
+
+
+// #define LED_MASK	0xff<<8	/* yes */
+// #define LED_MASK	0xf0<<8	/* no */
+// #define LED_MASK	0x0f<<8	/* yes */
+// #define LED_MASK	0x03<<8	/* no */
+// #define LED_MASK	0x0c<<8	/* yes */
+// #define LED_MASK	0x04<<8	/* no */
+// #define LED_MASK	0x08<<8	/* yes */
+
+/* This looks more like B3 to me */
+#define LED_BIT		(8+3)
+#define LED_MASK	BIT(LED_BIT)
+
+void
+blinker ( void )
+{
+	struct rock_gpio *gp = GPIO_BASE;
+
+	gp->dir = LED_MASK;
+
+	for ( ;; ) {
+	    puts ( "on\n" );
+	    gp->data = LED_MASK;
+	    delay ();
+	    puts ( "off\n" );
+	    gp->data = 0;
+	    delay ();
+	}
+}
+
+
+void
+main ( void )
+{
+	uart_init();
+
+	/* This will run the hello demo */
+	// talker ();
+
+	/* This will run the blink demo */
+	blinker ();
 
 	/* NOTREACHED */
 }
