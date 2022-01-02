@@ -75,8 +75,7 @@ struct rock_uart {
 
 /* The TRM describes the GPIO in chapter 20
  *
- * The on chip LED is connected to a signal GPIO0_B5
- * according to the schematic.
+ * The on chip LED is connected to GPIO0_B3
  */
 
 struct rock_gpio {
@@ -184,7 +183,9 @@ blinker_BRUTE ( void )
 	}
 }
 
-
+/* Trial and error to find the bit (since I was lied to and
+ *  told it was B5 originally
+ */
 // #define LED_MASK	0xff<<8	/* yes */
 // #define LED_MASK	0xf0<<8	/* no */
 // #define LED_MASK	0x0f<<8	/* yes */
@@ -197,19 +198,23 @@ blinker_BRUTE ( void )
 #define LED_BIT		(8+3)
 #define LED_MASK	BIT(LED_BIT)
 
+/* This version is polite and doesn't disturb any bits other
+ * than the one of interest.
+ */
 void
 blinker ( void )
 {
 	struct rock_gpio *gp = GPIO_BASE;
 
-	gp->dir = LED_MASK;
+	gp->dir |= LED_MASK;
 
+	/* Setting the bit does turn the LED on */
 	for ( ;; ) {
-	    puts ( "on\n" );
-	    gp->data = LED_MASK;
+	    // puts ( "on\n" );
+	    gp->data |= LED_MASK;
 	    delay ();
-	    puts ( "off\n" );
-	    gp->data = 0;
+	    // puts ( "off\n" );
+	    gp->data &= ~LED_MASK;
 	    delay ();
 	}
 }
@@ -223,6 +228,7 @@ main ( void )
 	/* This will run the hello demo */
 	// talker ();
 
+	puts ( "Blinking ...\n" );
 	/* This will run the blink demo */
 	blinker ();
 
