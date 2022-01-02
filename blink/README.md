@@ -4,5 +4,4 @@ The game here is to blink the on board LED.
 
 Tom Trebisky  1-1-2022
 
-This LED should be green and the schematic shows it as
-"GPIO0_B5" or "LED1_OUT".
+This LED is green and is connected to "GPIO0_B3"
