@@ -11,3 +11,4 @@ Here are the projects you will find here:
 * hello - a simple "do something" first project.
 * blink - use the GPIO to blink the on-boardLED.
 * printf - add printf to the blink demo (and more)
+* inter - generate an interrupt
