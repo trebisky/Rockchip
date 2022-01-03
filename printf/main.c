@@ -6,7 +6,8 @@
 void uart_init ( void );
 void uart_puts ( char * );
 
-void printf ( char * );
+void printf ( char *, ... );
+void show_reg ( char *, int * );
 
 typedef volatile unsigned int vu32;
 typedef unsigned int u32;
@@ -100,12 +101,44 @@ blinker ( void )
 }
 
 void
+show_stack ( int recursion )
+{
+	int dummy;
+
+	show_reg ( "Stack: ", &dummy );
+	if ( recursion )
+	    show_stack ( 0 );
+}
+
+int bss_test[128];
+
+void
+verify_bss ( void )
+{
+	int i;
+	int bss_bad = 0;
+
+	for ( i=0; i<128; i++ ) {
+	    if ( bss_test[i] ) {
+		printf ( "BSS %d: %h\n", i, bss_test[i] );
+		bss_bad = 1;
+	    }
+	}
+	if ( ! bss_bad )
+	    printf ( "BSS ok\n" );
+}
+
+void
 main ( void )
 {
 	uart_init();
 
 	/* This will run the hello demo */
 	// talker ();
+
+	/* This will check the stack address */
+	show_stack ( 1 );
+	verify_bss ();
 
 	printf ( "Blinking ...\n" );
 	/* This will run the blink demo */
