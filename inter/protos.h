@@ -13,4 +13,8 @@ void led_off ( void );
 void printf ( char *, ... );
 void show_reg ( char *, int * );
 
+void mmu_init ( void );
+
+void gic_init ( void );
+
 /* THE END */

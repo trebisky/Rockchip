@@ -20,5 +20,14 @@ clear_bss_loop:
 
 spin:	b		spin
 
+# This will fault unless we are in secure mode
+# And indeed we do (we get a synch abort, as usual.
+# so we are not running in secure mode, which is good
+# and as expected.
+.global check_secure
+check_secure:
+	msr             SCR_EL3, x0
+	ret
+
 
 // THE END

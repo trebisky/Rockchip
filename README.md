@@ -12,3 +12,4 @@ Here are the projects you will find here:
 * blink - use the GPIO to blink the on-boardLED.
 * printf - add printf to the blink demo (and more)
 * inter - generate an interrupt
+* make_boot - put U-Boot onto TF card

@@ -5,20 +5,6 @@
 
 #include "protos.h"
 
-int limit = 200;
-
-void
-talker ( void )
-{
-	if ( ! limit ) {
-	    for ( ;; )
-		uart_puts ( "hello " );
-	} else {
-	    for ( ;limit--; )
-		uart_puts ( "hello " );
-	}
-}
-
 /* This might give about a 1 second delay */
 void
 delay ( void )
@@ -51,22 +37,24 @@ show_stack ( int recursion )
 	    show_stack ( 0 );
 }
 
-int bss_test[128];
-
 void
-verify_bss ( void )
+examine ( long addr )
 {
-	int i;
-	int bss_bad = 0;
+	int *ip = (int *) addr;
+	int val;
 
-	for ( i=0; i<128; i++ ) {
-	    if ( bss_test[i] ) {
-		printf ( "BSS %d: %h\n", i, bss_test[i] );
-		bss_bad = 1;
-	    }
-	}
-	if ( ! bss_bad )
-	    printf ( "BSS ok\n" );
+	printf ( "Examine %h\n", addr );
+	val = *ip;
+	printf ( " value = %h\n", val );
+}
+
+static inline unsigned int
+get_el(void)
+{
+        unsigned int val;
+
+        asm volatile("mrs %0, CurrentEL" : "=r" (val) : : "cc");
+        return val >> 2;
 }
 
 void
@@ -74,13 +62,35 @@ main ( void )
 {
 	uart_init ();
 	gpio_init ();
+	gic_init ();
 
-	/* This will run the hello demo */
-	// talker ();
+	printf ( "Inter demo for RK3399  1-3-2022\n" );
 
 	/* This will check the stack address */
 	show_stack ( 1 );
-	verify_bss ();
+
+#ifdef MMU_EXPERIMENTS
+	// examine ( 0xfffd0000 );	/* gets synch abort */
+	// examine ( 0xffff0000 );	/* gets synch abort */
+	// examine ( 0xff930000 );		/* MMU */
+
+	/* We try disabling the MMU to see if that allows us
+	 * to access the ROM memory addresses.
+	 * It does not.
+	 */
+	// mmu_init ();
+
+	// examine ( 0xffff0000 );	/* gets synch abort */
+	// examine ( 0xfffd0000 );	/* gets synch abort */
+#endif
+
+	// This gets a fault, proving we are not in secure mode.
+	// check_secure ();
+
+	// This returns 2, which is a bit surprising,
+	// but apparently some kind of hypervisor is
+	// running at EL3.
+	printf ( "Current EL: %h\n", get_el() );
 
 	printf ( "Blinking ...\n" );
 	/* This will run the blink demo */
