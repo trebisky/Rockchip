@@ -13,3 +13,4 @@ Here are the projects you will find here:
 * printf - add printf to the blink demo (and more)
 * inter - generate an interrupt
 * make_boot - put U-Boot onto TF card
+* mkrock - make a bootable idbloader file
