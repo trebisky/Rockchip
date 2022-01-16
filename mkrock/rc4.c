@@ -48,6 +48,10 @@ rc4_encode( unsigned char *buf, unsigned int len, unsigned char key[16] )
 }
 
 /* I add my simple front end to play with it.
+ * Note that this decrypts itself, you just run
+ * an encrypted file through and you get back what
+ * you started with.  And it is byte by byte, the
+ * encrypted file size is the same as the original.
  */
 
 #include <sys/types.h>
@@ -65,6 +69,7 @@ static unsigned char rc4_key[16] = {
         45, 44, 123, 56, 23, 13, 23, 17
 };
 
+/* Quick and dirty, no error messages */
 int
 main ( int argc, char **argv )
 {
