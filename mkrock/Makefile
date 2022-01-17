@@ -11,3 +11,10 @@ ROBJS = mkrock.o rc4.o
 mkrock:	$(ROBJS)
 	cc -o mkrock $(ROBJS)
 
+# The two test files, one and input and the other
+#  the expected output were obtained from the u-boot/tpl directory
+test:
+	./mkrock u-boot-tpl.bin mkrock.bin
+	cmp mkrock.bin u-boot-tpl-rockchip.bin
+
+

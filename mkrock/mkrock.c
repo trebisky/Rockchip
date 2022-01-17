@@ -141,7 +141,7 @@ char buffer[BUF_SIZE];
 int
 main ( int argc, char **argv )
 {
-	int fd, n;
+	int in_fd, out_fd;
 	struct rock_header hdr;
 
 	--argc;
@@ -150,21 +150,20 @@ main ( int argc, char **argv )
 	    error ( "usage: mkrock infile outfile" );
 	}
 
+	in_fd = open ( argv[0], O_RDONLY );
+	if ( in_fd < 0 )
+	    error ( "Cannot open input file" );
+
+	out_fd = open ( argv[1], O_WRONLY | O_CREAT, 0664 );
+	if ( out_fd < 0 )
+	    error ( "Cannot open output file" );
+
 	make_header ( &hdr );
-	write ( fd, (char *) &hdr, sizeof(hdr) );
-	write_zero_pad ( fd, INIT_OFFSET - 1 );
+	write ( out_fd, (char *) &hdr, sizeof(hdr) );
+	write_zero_pad ( out_fd, INIT_OFFSET - 1 );
 
-#ifdef notdef
-	fd = open ( *argv, O_RDONLY );
-	if ( fd < 0 )
-	    return 1;
-	n = read ( fd, buffer, BUF_SIZE );
-	if ( n <= 0 )
-	    return 1;
-
-	rock_encode ( buffer, n );
-	write ( 1, buffer, n );
-#endif
+	close ( out_fd );
+	close ( in_fd );
 
 	return 0;
 }
