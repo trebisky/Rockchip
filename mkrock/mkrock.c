@@ -14,6 +14,8 @@
 
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/mman.h>
+
 #include <fcntl.h>
 #include <unistd.h>
 #include <stdlib.h>
@@ -37,6 +39,9 @@ struct rock_header {
 };
 
 #define ROCK_MAGIC	0x0ff0aa55
+#define	SIZE_ALIGN	2048
+
+#define ROUNDUP(x, y)	(((x) + ((y) - 1)) & ~((y) - 1))
 
 #ifdef notdef
 /**
@@ -82,12 +87,28 @@ error ( char *msg )
 void
 write_zero_pad ( int fd, int count )
 {
+	char *zeros;
+
+	zeros = (char *) malloc ( count );
+	memset ( zeros, '\0', count );
+	write ( fd, zeros, count );
+	free ( zeros );
 }
 
 #define INIT_OFFSET	4	/* 512 blocks from start of file */
 
 /* I run this on an Intel machine, so I don't worry about byte order routines
  * as both my host and the target are both little endian.
+ *
+ * The following link discusses the size values in this header.
+ *   https://lists.denx.de/pipermail/u-boot/2017-May/293267.html
+ *
+ * Adding size to the init_boot_size value, allows a feature this
+ * describes as BACK_TO_BROM to cause a second loader to be executed.
+ *
+ * Also note that init_size must be a multiple of 4*512 (i.e. 2K)
+ *  or the bootrom will not load it.  So the image must be padded
+ *  to a 2K multiple.
  */
 void
 make_header ( struct rock_header *rh )
@@ -130,12 +151,47 @@ make_header ( struct rock_header *rh )
         rc4_encode(buf, RK_BLK_SIZE, rc4_key);
 #endif
 
+struct image {
+	int size;
+	int pad_size;
+} image_info;
 
-/*
-#define BUF_SIZE	64*1024
-char buffer[BUF_SIZE];
-*/
+void
+setup_image_sizes ( int ifd )
+{
+	struct stat stbuf;
+	int size;
+	int pad_size;
 
+	if ( fstat(ifd, &stbuf) < 0)
+	    error ( "Cannot get input image size" );
+
+	image_info.size = stbuf.st_size;
+
+	image_info.pad_size = ROUNDUP ( image_info.size, SIZE_ALIGN );
+
+	printf ( "size, aligned size = %d %d\n", image_info.size, image_info.pad_size );
+}
+
+void
+write_image ( int ifd, int ofd )
+{
+	char *imp;
+
+	/* Here is a clever way to copy a file,
+	 * stolen from u-boot.  mmap the input file,
+	 * then write from that mapped address.
+	 */
+	imp = mmap(0, image_info.size, PROT_READ, MAP_SHARED, ifd, 0);
+        if ( imp == MAP_FAILED )
+	    error ( "Cannot map/read image" );
+
+	write ( ofd, imp, image_info.size );
+	munmap ( (void *)imp, image_info.size);
+        close ( ifd );
+
+	write_zero_pad ( ofd, image_info.pad_size - image_info.size );
+}
 
 /* Quick and dirty, no error messages */
 int
@@ -158,9 +214,13 @@ main ( int argc, char **argv )
 	if ( out_fd < 0 )
 	    error ( "Cannot open output file" );
 
+	setup_image_sizes ( in_fd );
+
 	make_header ( &hdr );
 	write ( out_fd, (char *) &hdr, sizeof(hdr) );
-	write_zero_pad ( out_fd, INIT_OFFSET - 1 );
+	write_zero_pad ( out_fd, 512 * (INIT_OFFSET - 1) );
+
+	write_image ( in_fd, out_fd );
 
 	close ( out_fd );
 	close ( in_fd );
