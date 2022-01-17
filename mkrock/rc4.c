@@ -47,6 +47,21 @@ rc4_encode( unsigned char *buf, unsigned int len, unsigned char key[16] )
 	}
 }
 
+/* Here is the Rockchip key */
+static unsigned char rc4_key[16] = {
+        124, 78, 3, 4, 85, 5, 9, 7,
+        45, 44, 123, 56, 23, 13, 23, 17
+};
+
+
+void
+rock_encode( unsigned char *buf, unsigned int len )
+{
+	rc4_encode ( buf, len, rc4_key );
+}
+
+#ifdef WITH_MAIN
+
 /* I add my simple front end to play with it.
  * Note that this decrypts itself, you just run
  * an encrypted file through and you get back what
@@ -62,12 +77,6 @@ rc4_encode( unsigned char *buf, unsigned int len, unsigned char key[16] )
 #define BUF_SIZE	64*1024
 
 char buffer[BUF_SIZE];
-
-/* Here is the Rockchip key */
-static unsigned char rc4_key[16] = {
-        124, 78, 3, 4, 85, 5, 9, 7,
-        45, 44, 123, 56, 23, 13, 23, 17
-};
 
 /* Quick and dirty, no error messages */
 int
@@ -87,10 +96,12 @@ main ( int argc, char **argv )
 	if ( n <= 0 )
 	    return 1;
 
-	rc4_encode ( buffer, n, rc4_key );
+	rock_encode ( buffer, n );
+
 	write ( 1, buffer, n );
 
 	return 0;
 }
+#endif
 
 /* THE END */

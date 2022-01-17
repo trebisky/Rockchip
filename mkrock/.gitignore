@@ -1,3 +1,7 @@
 myboot.img
 *.odx
 rc4
+mkrock
+*.o
+zzz
+test_file
