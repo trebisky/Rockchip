@@ -110,6 +110,17 @@ make_header ( struct rock_header *rh )
 	 * works.  It would be nice to see bootrom code or documentation and know exactly
 	 * how it handles this, especially with only 192K of static ram to load into.
 	 * This adds 1024 blocks to the init_size.
+	 *
+	 * I also examined the idbloader.bin file that came with the debian distribution
+	 * and it adds exactly this same 1024 blocks to the init_size.
+	 * It already has something appended to the file, and we learn elsewhere that
+	 * it has something called "ddr.bin" as the primary payload, but has the tpl
+	 * appended as "extra stuff" that is not described by the header in any way.
+	 *
+	 * Once all this gets on the SD card (or NAND) there is of course no vestige
+	 * of the original file size.  The loader can keep reading sectors from the
+	 * SD card (or NAND) until it fills memory, and presumably that is exactly
+	 * what it does.
 	 */
 	extra_size = image_info.pad_size + EXTRA_BOOT;
 
