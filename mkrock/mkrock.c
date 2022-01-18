@@ -38,43 +38,15 @@ struct rock_header {
 	short _pad2;
 };
 
+/* Some things are specified in units of 512 byte blocks.
+ * Things we load must be padded to multiples of 2048 bytes.
+ */
 #define ROCK_MAGIC	0x0ff0aa55
 #define	SIZE_ALIGN	2048
+#define	BLOCK_SIZE	512
+#define	EXTRA_BOOT	524288		/* 512 << 10 i.e. 1024 blocks */
 
 #define ROUNDUP(x, y)	(((x) + ((y) - 1)) & ~((y) - 1))
-
-#ifdef notdef
-/**
- * struct header0_info - header block for boot ROM
- *
- * This is stored at SD card block 64 (where each block is 512 bytes, or at
- * the start of SPI flash. It is encoded with RC4.
- *
- * @magic:              Magic (must be RK_MAGIC)
- * @disable_rc4:        0 to use rc4 for boot image,  1 to use plain binary
- * @init_offset:        Offset in blocks of the SPL code from this header
- *                      block. E.g. 4 means 2KB after the start of this header.
- * Other fields are not used by U-Boot
- */
-struct header0_info {
-        uint32_t magic;
-        uint8_t reserved[4];
-        uint32_t disable_rc4;
-        uint16_t init_offset;
-        uint8_t reserved1[492];
-        uint16_t init_size;
-        uint16_t init_boot_size;
-        uint8_t reserved2[2];
-};
-enum {
-        RK_BLK_SIZE             = 512,
-        RK_SIZE_ALIGN           = 2048,
-        RK_INIT_OFFSET          = 4,
-        RK_MAX_BOOT_SIZE        = 512 << 10,
-        RK_SPL_HDR_START        = RK_INIT_OFFSET * RK_BLK_SIZE,
-        RK_SPL_HDR_SIZE         = 4,
-};
-#endif
 
 void
 error ( char *msg )
@@ -89,11 +61,19 @@ write_zero_pad ( int fd, int count )
 {
 	char *zeros;
 
+	printf ( "zero pad: %d\n", count );
+
 	zeros = (char *) malloc ( count );
 	memset ( zeros, '\0', count );
 	write ( fd, zeros, count );
 	free ( zeros );
 }
+
+struct image {
+	int size;
+	int pad_size;
+} image_info;
+
 
 #define INIT_OFFSET	4	/* 512 blocks from start of file */
 
@@ -113,48 +93,31 @@ write_zero_pad ( int fd, int count )
 void
 make_header ( struct rock_header *rh )
 {
+	int extra_size;
+
 	memset ( (char *) rh, '\0', sizeof ( struct rock_header) );
 
 	rh->magic = ROCK_MAGIC;
-	rh->disable_rc4 = 0;	/* The SPL is not encrypted */
+	rh->disable_rc4 = 1;	/* The SPL is not encrypted */
 	rh->init_offset = INIT_OFFSET;
 
-	rh->init_size = 99;
-	rh->init_boot_size = 99;
+	rh->init_size = image_info.pad_size / BLOCK_SIZE;
+	printf ( "init size = %d %x %d\n", rh->init_size, rh->init_size, image_info.pad_size );
+
+	/* We add a huge (512K) region to the end of the actual boot image we provide.
+	 * This certainly allows all manner of things (such as a dtb) to be appended to
+	 * the file, and this is exactly what U-boot does and we can only assume that it
+	 * works.  It would be nice to see bootrom code or documentation and know exactly
+	 * how it handles this, especially with only 192K of static ram to load into.
+	 * This adds 1024 blocks to the init_size.
+	 */
+	extra_size = image_info.pad_size + EXTRA_BOOT;
+
+	rh->init_boot_size = extra_size / BLOCK_SIZE;
+	printf ( "extra size = %d %x %d\n", rh->init_boot_size, rh->init_boot_size, extra_size );
 
 	rock_encode ( (char *) rh, sizeof(struct rock_header) );
 }
-
-#ifdef notdef
-	memset(buf, '\0', RK_INIT_OFFSET * RK_BLK_SIZE);
-        hdr->magic = cpu_to_le32(RK_MAGIC);
-        printf ( "TJT - magic = %08x\n", cpu_to_le32(RK_MAGIC) );
-        hdr->disable_rc4 = cpu_to_le32(!rkcommon_need_rc4_spl(params));
-        hdr->init_offset = cpu_to_le16(RK_INIT_OFFSET);
-        hdr->init_size   = cpu_to_le16(spl_params.init_size / RK_BLK_SIZE);
-
-        /*
-         * init_boot_size needs to be set, as it is read by the BootROM
-         * to determine the size of the next-stage bootloader (e.g. U-Boot
-         * proper), when used with the back-to-bootrom functionality.
-         *
-         * see https://lists.denx.de/pipermail/u-boot/2017-May/293267.html
-         * for a more detailed explanation by Andy Yan
-         */
-        if (spl_params.boot_file)
-                init_boot_size = spl_params.init_size + spl_params.boot_size;
-        else
-                init_boot_size = spl_params.init_size + RK_MAX_BOOT_SIZE;
-        hdr->init_boot_size = cpu_to_le16(init_boot_size / RK_BLK_SIZE);
-
-        printf ( "TJT - encode header, %d bytes\n", RK_BLK_SIZE );
-        rc4_encode(buf, RK_BLK_SIZE, rc4_key);
-#endif
-
-struct image {
-	int size;
-	int pad_size;
-} image_info;
 
 void
 setup_image_sizes ( int ifd )
@@ -182,9 +145,17 @@ write_image ( int ifd, int ofd )
 	 * stolen from u-boot.  mmap the input file,
 	 * then write from that mapped address.
 	 */
-	imp = mmap(0, image_info.size, PROT_READ, MAP_SHARED, ifd, 0);
+	// imp = mmap(0, image_info.size, PROT_READ | PROT_WRITE, MAP_SHARED, ifd, 0);
+	imp = mmap(0, image_info.size, PROT_READ | PROT_WRITE, MAP_PRIVATE, ifd, 0);
         if ( imp == MAP_FAILED )
 	    error ( "Cannot map/read image" );
+
+	/* Overwrite the first 4 bytes with this "header"
+	 * This seems like a suspicious thing to do, but the files I have
+	 * examined just have a branch to the next instruction in this place,
+	 * which can safely be overwritten.
+	 */
+	memcpy ( imp, "RK33", 4 );
 
 	write ( ofd, imp, image_info.size );
 	munmap ( (void *)imp, image_info.size);
