@@ -14,3 +14,4 @@ Here are the projects you will find here:
 * inter - generate an interrupt
 * make_boot - put U-Boot onto TF card
 * mkrock - make a bootable idbloader file
+* bare_blink - blink demo loaded directly by bootrom

@@ -4,6 +4,19 @@
  * Tom Trebisky  1-18-2022
  */
 
+/* When I first ran this, the green LED simply came on,
+ * which was lucky for me, otherwise I would have just
+ * thought the demo had failed.  With this count, it
+ * stays on for 45 seconds!  So the CPU is either just
+ * running about 100 times slower, or caches are not
+ * enabled or something of the sort.
+ */
+// #define DELAY_COUNT	100000000
+
+/* This gives something like a 1 hz blink rate.
+ */
+#define DELAY_COUNT	1000000
+
 typedef volatile unsigned int vu32;
 typedef unsigned int u32;
 
@@ -46,48 +59,17 @@ struct rock_gpio {
 
 #define GPIO_BASE	GPIO0_BASE
 
-/* This might give about a 1 second delay */
 void
 delay ( void )
 {
-        volatile int count = 100000000;
+        volatile int count = DELAY_COUNT;
 
         while ( count-- )
             ;
 }
 
-/* This works, but manipulates all 32 bits.
- * setting the direction to output (1) is essential
+/* The LED is on B3
  */
-void
-blinker_BRUTE ( void )
-{
-	struct rock_gpio *gp = GPIO_BASE;
-
-	gp->dir = 0xffffffff;
-
-	for ( ;; ) {
-	    // puts ( "on\n" );
-	    gp->data = 0xffffffff;
-	    delay ();
-	    // puts ( "off\n" );
-	    gp->data = 0;
-	    delay ();
-	}
-}
-
-/* Trial and error to find the bit (since I was lied to and
- *  told it was B5 originally
- */
-// #define LED_MASK	0xff<<8	/* yes */
-// #define LED_MASK	0xf0<<8	/* no */
-// #define LED_MASK	0x0f<<8	/* yes */
-// #define LED_MASK	0x03<<8	/* no */
-// #define LED_MASK	0x0c<<8	/* yes */
-// #define LED_MASK	0x04<<8	/* no */
-// #define LED_MASK	0x08<<8	/* yes */
-
-/* This looks more like B3 to me */
 #define LED_BIT		(8+3)
 #define LED_MASK	BIT(LED_BIT)
 
@@ -109,7 +91,6 @@ blinker ( void )
 	    delay ();
 	}
 }
-
 
 void
 main ( void )

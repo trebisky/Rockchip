@@ -61,7 +61,7 @@ write_zero_pad ( int fd, int count )
 {
 	char *zeros;
 
-	printf ( "zero pad: %d\n", count );
+	// printf ( "zero pad: %d\n", count );
 
 	zeros = (char *) malloc ( count );
 	memset ( zeros, '\0', count );
@@ -102,7 +102,7 @@ make_header ( struct rock_header *rh )
 	rh->init_offset = INIT_OFFSET;
 
 	rh->init_size = image_info.pad_size / BLOCK_SIZE;
-	printf ( "init size = %d %x %d\n", rh->init_size, rh->init_size, image_info.pad_size );
+	// printf ( "init size = %d %x %d\n", rh->init_size, rh->init_size, image_info.pad_size );
 
 	/* We add a huge (512K) region to the end of the actual boot image we provide.
 	 * This certainly allows all manner of things (such as a dtb) to be appended to
@@ -125,7 +125,7 @@ make_header ( struct rock_header *rh )
 	extra_size = image_info.pad_size + EXTRA_BOOT;
 
 	rh->init_boot_size = extra_size / BLOCK_SIZE;
-	printf ( "extra size = %d %x %d\n", rh->init_boot_size, rh->init_boot_size, extra_size );
+	// printf ( "extra size = %d %x %d\n", rh->init_boot_size, rh->init_boot_size, extra_size );
 
 	rock_encode ( (char *) rh, sizeof(struct rock_header) );
 }
@@ -144,7 +144,7 @@ setup_image_sizes ( int ifd )
 
 	image_info.pad_size = ROUNDUP ( image_info.size, SIZE_ALIGN );
 
-	printf ( "size, aligned size = %d %d\n", image_info.size, image_info.pad_size );
+	// printf ( "size, aligned size = %d %d\n", image_info.size, image_info.pad_size );
 }
 
 void

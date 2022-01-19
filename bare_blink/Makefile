@@ -54,6 +54,14 @@ install: $(TARGET)
 	#cp $(TARGET) /var/lib/tftpboot
 	mkrock bare.bin bare.img
 
+CARD = /dev/sdh
+
+# People say that notruc is pointless for a block device,
+#  but we retain it for old times sake.
+card:	bare.bin
+	mkrock bare.bin bare.img
+	dd if=/dev/zero of=$(CARD) count=64
+	dd if=bare.img of=$(CARD) seek=64 conv=notrunc
 
 $(BOARD).elf: $(OBJS)
 	@echo " [LD]   $(BOARD).elf"
