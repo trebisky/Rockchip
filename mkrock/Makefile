@@ -11,6 +11,9 @@ ROBJS = mkrock.o rc4.o
 mkrock:	$(ROBJS)
 	cc -o mkrock $(ROBJS)
 
+install:	mkrock
+	cp mkrock /usr/local/bin
+
 # The two test files, one an input and the other
 #  the expected output were obtained from the u-boot/tpl directory
 test:
