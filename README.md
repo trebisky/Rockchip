@@ -11,6 +11,7 @@ Here are the projects you will find here:
 * hello - a simple "do something" first project.
 * blink - use the GPIO to blink the on-boardLED.
 * printf - add printf to the blink demo (and more)
+* hello2 - uart driver with complete hardware initialization
 * inter - generate an interrupt
 * make_boot - put U-Boot onto TF card
 * mkrock - make a bootable idbloader file
