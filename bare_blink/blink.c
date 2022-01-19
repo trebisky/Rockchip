@@ -95,7 +95,6 @@ blinker ( void )
 void
 main ( void )
 {
-	/* This will run the blink demo */
 	blinker ();
 
 	/* NOTREACHED */
