@@ -91,7 +91,31 @@ struct rock_uart {
  * For UART2, the pins are on GPIO4B
  */
 #define GRF_BASE		0xff770000
+#define GRF_IOMUX_BASE		0xff77e000
 #define GRF_GPIO4B_IOMUX        0xe024
+
+/* The PMU GRF iomux registers control GPIO0 and GPIO1
+ */
+#define PMU_GRF_BASE		0xff320000
+
+struct iomux_regs {
+	vu32	iomux[12];
+};
+
+/* belongs in an iomux.h file
+ */
+#define IOMUX_2A	0
+#define IOMUX_2B	1
+#define IOMUX_2C	2
+#define IOMUX_2D	3
+#define IOMUX_3A	4
+#define IOMUX_3B	5
+#define IOMUX_3C	6
+#define IOMUX_3D	7
+#define IOMUX_4A	8
+#define IOMUX_4B	9
+#define IOMUX_4C	10
+#define IOMUX_4D	11
 
 void
 io_write ( u64 base, u64 offset, u32 value )
@@ -99,6 +123,19 @@ io_write ( u64 base, u64 offset, u32 value )
 	u32 *addr = (u32 *) (base + offset);
 
 	*addr = value;
+}
+
+void
+iomux_set ( int gpio, int bit, int func )
+{
+	struct iomux_regs *ior = (struct iomux_regs *)  GRF_IOMUX_BASE;
+	u32 val;
+
+	val = (3<<(16+bit*2));
+	val |= (func<<(bit*2));
+
+	val = 999;
+	ior->iomux[gpio] = val;
 }
 
 /* We need to do this for UART2 which is our console.
