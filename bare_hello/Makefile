@@ -8,7 +8,7 @@ CROSS_COMPILE = aarch64-linux-gnu-
 
 # -------------------------------------
 
-OBJS = start.o blink.o
+OBJS = start.o hello.o uart.o
 
 TARGET = $(BOARD).bin
 
@@ -54,6 +54,7 @@ install: $(TARGET)
 
 CARD = /dev/sdh
 
+# You must be root to do this on my system --
 # People say that notruc is pointless for a block device,
 #  but we retain it for old times sake.
 card:	bare.bin
