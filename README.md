@@ -17,3 +17,5 @@ Here are the projects you will find here:
 * mkrock - make a bootable idbloader file
 * bare_blink - blink demo loaded directly by bootrom
 * bare_hello - hello demo loaded directly by bootrom
+* bare_dump - printf and ROM dump loaded directly by bootrom
+* bootrom - analysis of the on-chip bootrom
