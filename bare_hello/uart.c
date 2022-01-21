@@ -5,7 +5,6 @@
 
 typedef volatile unsigned int vu32;
 typedef unsigned int u32;
-typedef unsigned long u64;
 
 #define BIT(x)	(1<<(x))
 
@@ -102,6 +101,10 @@ struct iomux_regs {
 	vu32	iomux[12];
 };
 
+struct pmu_iomux_regs {
+	vu32	iomux[8];
+};
+
 /* belongs in an iomux.h file
  */
 #define IOMUX_2A	0
@@ -117,6 +120,18 @@ struct iomux_regs {
 #define IOMUX_4C	10
 #define IOMUX_4D	11
 
+#define PMU_IOMUX_0A	0
+#define PMU_IOMUX_0B	1
+#define PMU_IOMUX_0C	2	/* not in RK3399 */
+#define PMU_IOMUX_0D	3	/* not in RK3399 */
+#define PMU_IOMUX_1A	4
+#define PMU_IOMUX_1B	5
+#define PMU_IOMUX_1C	6
+#define PMU_IOMUX_1D	7
+
+#ifdef notdef
+/* XXX - hack */
+typedef unsigned long u64;
 void
 io_write ( u64 base, u64 offset, u32 value )
 {
@@ -124,6 +139,7 @@ io_write ( u64 base, u64 offset, u32 value )
 
 	*addr = value;
 }
+#endif
 
 void
 iomux_set ( int gpio, int bit, int func )
@@ -134,7 +150,6 @@ iomux_set ( int gpio, int bit, int func )
 	val = (3<<(16+bit*2));
 	val |= (func<<(bit*2));
 
-	val = 999;
 	ior->iomux[gpio] = val;
 }
 
@@ -167,8 +182,16 @@ uart_iomux ( void )
 	// #define grf_writel(v, offset)   do { writel(v, RKIO_GRF_PHYS + offset); } while (0)
 	// #define RKIO_GRF_PHYS                   0xFF770000
 	// #define GRF_GPIO4B_IOMUX        0xe024
-	io_write ( GRF_BASE, GRF_GPIO4B_IOMUX, 
-	    (3 << 18) | (3 << 16) | (2 << 2) | (2 << 0) );
+	// io_write ( GRF_BASE, GRF_GPIO4B_IOMUX, 
+	//     (3 << 18) | (3 << 16) | (2 << 2) | (2 << 0) );
+
+	/* Some boards have Uart 2 on these pins */
+	// iomux_set ( IOMUX_4B, 0, 2 );		/* GPIO4_B0 */
+	// iomux_set ( IOMUX_4B, 1, 2 );		/* GPIO4_B1 */
+
+	/* Orange Pi 4 uses these pins for Uart 2 */
+	iomux_set ( IOMUX_4C, 3, 1 );		/* GPIO4_C3 */
+	iomux_set ( IOMUX_4C, 4, 1 );		/* GPIO4_C4 */
 }
 
 #define LCR_DLAT	0x80

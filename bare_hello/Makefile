@@ -61,6 +61,7 @@ card:	bare.bin
 	mkrock bare.bin bare.img
 	dd if=/dev/zero of=$(CARD) count=64
 	dd if=bare.img of=$(CARD) seek=64 conv=notrunc
+	sync
 
 $(BOARD).elf: $(OBJS)
 	@echo " [LD]   $(BOARD).elf"
