@@ -141,9 +141,22 @@ dump_add ( u32 *addr )
 	unsigned long ia = (unsigned long) addr;
 	u32 val = 0;
 
-	printf ( "Dump at %h: %h\n", ia, val );
+	// printf ( "Dump at %h: %h\n", ia, val );
 	val = *addr;
 	printf ( "Dump at %h: %h\n", ia, val );
+}
+
+void
+dump_mem ( u32 *addr, int count )
+{
+	int lines = count / 4;
+	int i;
+
+	for ( i=0; i<lines; i++ ) {
+	    printf ( "%h:  ", (unsigned long) addr );
+	    printf ( "%h %h %h %h\n", addr[0], addr[1], addr[2], addr[3] );
+	    addr += 4;
+	}
 }
 
 void
@@ -162,6 +175,8 @@ main ( void )
 
 	dump_add ( (u32 *) 0xffff0000 );
 	dump_add ( (u32 *) 0xfffd0000 );
+
+	dump_mem ( (u32 *) 0xffff0000, 0x10000/4 );
 
 	printf ( "Blinking ...\n" );
 	blinker ();
