@@ -45,12 +45,28 @@
 ; instructions "flow" from right to left, as:
 ; name dest, src1, src2
 ; name dest, src1, immediate
+;
 ; ldr dest, [src] -- load from address in src register
 ; str src, [dest] -- store to address in src register
+; stp src1, src2, [dest] -- store a pair of registers
+;
+; It is worth noting that aarch64 has nothing like the stm/ldm
+;  multiple register load and store instructions
 ;
 ; cbz, cbnz -- compare to zero and branch
 ; tbz -- test and branch if zero
-
+;
+; Note that "ldr" instructions load a 64 bit value from memory,
+; typically from an address given as an offset from the location
+; of the current instruction, but we would never know that.
+;
+; What we do need to pay attention to on 64 bit loads is how the
+; values are displayed.  The ARM runs little endian in our case,
+; so our memory dump shows the low 32 bit value (swapped to big endian)
+; first, followed by the high 32 bit value (also swapped big endian).
+; This is generally not too confusing as the high 32 bits are typically
+; zero and we would prefer to see the interesting low 32 bits
+; swapped big endian to make a sensible address.
 
 
 ffff0000 <.text>:
@@ -4001,6 +4017,7 @@ ffff3d34:	a94157f4 	ldp	x20, x21, [sp, #16]
 ffff3d38:	a9427bfd 	ldp	x29, x30, [sp, #32]
 ffff3d3c:	9100c3ff 	add	sp, sp, #0x30
 ffff3d40:	d65f03c0 	ret
+
 ffff3d44:	d10043ff 	sub	sp, sp, #0x10
 ffff3d48:	a9007bfd 	stp	x29, x30, [sp]
 ffff3d4c:	910003fd 	mov	x29, sp
@@ -4010,6 +4027,8 @@ ffff3d58:	97fff389 	bl	0xffff0b7c
 ffff3d5c:	97fffa97 	bl	0xffff27b8
 ffff3d60:	97fffedb 	bl	0xffff38cc
 ffff3d64:	17ffffff 	b	0xffff3d60
+
+; Called from an interesting spot above
 ffff3d68:	d10043ff 	sub	sp, sp, #0x10
 ffff3d6c:	a9007bfd 	stp	x29, x30, [sp]
 ffff3d70:	910003fd 	mov	x29, sp
@@ -4038,6 +4057,7 @@ ffff3dc8:	51000421 	sub	w1, w1, #0x1
 ffff3dcc:	91000442 	add	x2, x2, #0x1
 ffff3dd0:	35fffe41 	cbnz	w1, 0xffff3d98
 ffff3dd4:	d65f03c0 	ret
+
 ffff3dd8:	aa1f03e3 	mov	x3, xzr
 ffff3ddc:	b0000002 	adrp	x2, 0xffff4000
 ffff3de0:	9131a044 	add	x4, x2, #0xc68
@@ -4176,6 +4196,7 @@ ffff3ff0:	b9414800 	ldr	w0, [x0, #328]
 ffff3ff4:	b9400000 	ldr	w0, [x0]
 ffff3ff8:	b9000280 	str	w0, [x20]
 ffff3ffc:	b90002d8 	str	w24, [x22]
+
 ffff4000:	52800020 	mov	w0, #0x1                   	// #1
 ffff4004:	97fff28b 	bl	0xffff0a30
 ffff4008:	91001294 	add	x20, x20, #0x4
@@ -4384,7 +4405,8 @@ ffff4330:	a9427bfd 	ldp	x29, x30, [sp, #32]
 ffff4334:	9100c3ff 	add	sp, sp, #0x30
 ffff4338:	d65f03c0 	ret
 
-; first core starting up comes here.
+; first core starting up comes here.  GO!
+; it branches here, it does NOT do a "bl"
 
 ffff433c:	d10043ff 	sub	sp, sp, #0x10
 ffff4340:	a9007bfd 	stp	x29, x30, [sp]
@@ -4400,7 +4422,9 @@ ffff4364:	90ffc660 	adrp	x0, 0xff8c0000
 ffff4368:	b900101f 	str	wzr, [x0, #16]
 ffff436c:	97fff900 	bl	0xffff276c
 ffff4370:	97fffe75 	bl	0xffff3d44
-ffff4374:	14000000 	b	0xffff4374
+ffff4374:	14000000 	b	0xffff4374		; spin
+
+; subroutine, several calls
 ffff4378:	2a010003 	orr	w3, w0, w1
 ffff437c:	12000463 	and	w3, w3, #0x3
 ffff4380:	7100007f 	cmp	w3, #0x0
@@ -4433,10 +4457,12 @@ ffff43e8:	54000061 	b.ne	0xffff43f4  // b.any
 ffff43ec:	53187c60 	lsr	w0, w3, #24
 ffff43f0:	4b446000 	sub	w0, w0, w4, lsr #24
 ffff43f4:	d65f03c0 	ret
+
 ffff43f8:	f100005f 	cmp	x2, #0x0
 ffff43fc:	54000061 	b.ne	0xffff4408  // b.any
 ffff4400:	52800000 	mov	w0, #0x0                   	// #0
 ffff4404:	d65f03c0 	ret
+
 ffff4408:	92400043 	and	x3, x2, #0x1
 ffff440c:	f100007f 	cmp	x3, #0x0
 ffff4410:	54000060 	b.eq	0xffff441c  // b.none
@@ -4455,6 +4481,8 @@ ffff4440:	f100005f 	cmp	x2, #0x0
 ffff4444:	54fffec1 	b.ne	0xffff441c  // b.any
 ffff4448:	2a0303e0 	mov	w0, w3
 ffff444c:	d65f03c0 	ret
+
+; subroutine, many calls
 ffff4450:	d10083ff 	sub	sp, sp, #0x20
 ffff4454:	f9000bfe 	str	x30, [sp, #16]
 ffff4458:	a90077f3 	stp	x19, x29, [sp]
@@ -4466,6 +4494,7 @@ ffff446c:	a94077f3 	ldp	x19, x29, [sp]
 ffff4470:	f9400bfe 	ldr	x30, [sp, #16]
 ffff4474:	910083ff 	add	sp, sp, #0x20
 ffff4478:	d65f03c0 	ret
+
 ffff447c:	d10083ff 	sub	sp, sp, #0x20
 ffff4480:	f9000bfe 	str	x30, [sp, #16]
 ffff4484:	a90077f3 	stp	x19, x29, [sp]
