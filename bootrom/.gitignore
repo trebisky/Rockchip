@@ -2,3 +2,4 @@
 *.dis
 *.elf
 arm_wrap
+dump8

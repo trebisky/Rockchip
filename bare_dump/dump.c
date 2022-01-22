@@ -169,6 +169,13 @@ show_cpu ( void )
 	asm volatile("mrs %0, CurrentEL" : "=r" (val) : : "cc");
 	printf ( "CurrentEL reg = %h\n", val );
 	printf ( "CurrentEL = %d\n", val >> 2 );
+
+	asm volatile("mrs %0, midr_el1" : "=r" (val) : : "cc");
+	printf ( "Midr_el1 = %h\n", val );
+	/* This yields 410FD034
+	 * The "D03" indicates an A53 core
+	 * If we saw "D08" it would be A72
+	 */
 }
 
 void

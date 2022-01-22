@@ -8,10 +8,13 @@ MACH32 = -marm
 DUMP = aarch64-linux-gnu-objdump
 MACH = -maarch64
 
-all:	arm_wrap bootrom.dis
+all:	arm_wrap dump8 bootrom.dis
 
 arm_wrap:	arm_wrap.c
 	cc -o arm_wrap arm_wrap.c
+
+dump8:	dump8.c
+	cc -o dump8 dump8.c
 
 #install: arm_wrap
 #	cp arm_wrap /home/tom/bin
