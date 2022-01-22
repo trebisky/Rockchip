@@ -160,6 +160,18 @@ dump_mem ( u32 *addr, int count )
 }
 
 void
+show_cpu ( void )
+{
+	unsigned int val;
+
+        asm volatile("mrs %0, mpidr_el1" : "=r" (val) : : "cc");
+	printf ( "MPidr_el1 = %h\n", val );
+	asm volatile("mrs %0, CurrentEL" : "=r" (val) : : "cc");
+	printf ( "CurrentEL reg = %h\n", val );
+	printf ( "CurrentEL = %d\n", val >> 2 );
+}
+
+void
 main ( void )
 {
 	uart_init();
@@ -174,9 +186,11 @@ main ( void )
 	 */
 
 	dump_add ( (u32 *) 0xffff0000 );
-	dump_add ( (u32 *) 0xfffd0000 );
+	// dump_add ( (u32 *) 0xfffd0000 );
 
-	dump_mem ( (u32 *) 0xffff0000, 0x10000/4 );
+	// dump_mem ( (u32 *) 0xffff0000, 0x10000/4 );
+
+	show_cpu ();
 
 	printf ( "Blinking ...\n" );
 	blinker ();
