@@ -8,9 +8,6 @@ MACH32 = -marm
 DUMP = aarch64-linux-gnu-objdump
 MACH = -maarch64
 
-zot:
-	$(DUMP) --help
-
 all:	arm_wrap bootrom.dis
 
 arm_wrap:	arm_wrap.c
