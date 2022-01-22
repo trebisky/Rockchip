@@ -1,0 +1,34 @@
+#!/bin/ruby
+
+# 00000000: e59ff018 e59ff018 e59ff018 e59ff018    ................
+# 00000010: e59ff018 eafffffe e59ff018 e59ff018    ................
+
+infile = "rom.txt"
+
+of = File.new "bootrom.bin", "w+"
+
+def conv_SWAP ( word )
+    b1 = word[0,2]
+    b2 = word[2,2]
+    b3 = word[4,2]
+    b4 = word[6,2]
+    ww = b4 + b3 + b2 + b1
+    return ww.to_i(16)
+end
+
+def conv ( word )
+    return word.to_i(16)
+end
+
+File.foreach(infile) { |line|
+    w = line.split
+    data = Array.new
+    data << conv( w[1] )
+    data << conv( w[2] )
+    data << conv( w[3] )
+    data << conv( w[4] )
+    buf = data.pack("LLLL")
+    of.write buf
+}
+
+# THE END
