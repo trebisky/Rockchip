@@ -8,13 +8,21 @@ MACH32 = -marm
 DUMP = aarch64-linux-gnu-objdump
 MACH = -maarch64
 
-all:	arm_wrap dump8 bootrom.dis
+# WARNING !!
+# be SURE to copy bootrom.dis to some other name
+#  (such as bootrom.txt, as I do) before
+#  you begin adding notes.
+# otherwise, someday you will just type "make"
+#  and be really upset when you overwrite
+#  all your work.  You have been warned
+
+all:	arm_wrap dumpcon bootrom.dis
 
 arm_wrap:	arm_wrap.c
 	cc -o arm_wrap arm_wrap.c
 
-dump8:	dump8.c
-	cc -o dump8 dump8.c
+dumpcon:	dumpcon.c
+	cc -o dumpcon dumpcon.c
 
 #install: arm_wrap
 #	cp arm_wrap /home/tom/bin

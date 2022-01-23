@@ -2,6 +2,6 @@
 *.dis
 *.elf
 arm_wrap
-dump8
+dumpcon
 *.bak1
 *.bak*

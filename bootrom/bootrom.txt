@@ -12,12 +12,15 @@
 ; This is a 64k address space, but the ROM is only 32K
 ; We see two identical copies, the second starts at ffff8000
 ; and we just ignore it.
+; Also we fill just a bit over half of the 32K space,
+; there is a big block of zeros from ffff5150 to ffff7fec
 ;
 ; Some code I wrote that runs immediately after this bootloader
 ; shows:
 ; mpidr_el1 = 80000000
 ; currentel = 0000000c  (el3)
 ; which is no particular surprise.
+; So this code is run by core 0 of the A53 cluster.
 
 ; ff8c0000 is on chip SRAM (192K)
 ;  the stack gets initialized in here at ff8c2000
@@ -247,14 +250,14 @@ ffff0104:	d503201f 	nop
 
 ; Here are a bunch of 64 bit constants referenced above.
 
-ffff0108:	00000000ff8c2000	; this loads to the SP
-ffff0110:	00000000ffff4800	; this points to a vector table
-ffff0118:	00000000ff8c0004
-ffff0120:	00000000ff8c0008
-ffff0128:	00000000deadbeaf
-ffff0130:	00000000ff760514
-ffff0138:	00000000ff33c000
-ffff0140:	00000000ff33c180
+ffff0108: 00000000 ff8c2000	; this loads to the SP
+ffff0110: 00000000 ffff4800	; this points to a vector table
+ffff0118: 00000000 ff8c0004
+ffff0120: 00000000 ff8c0008
+ffff0128: 00000000 deadbeaf
+ffff0130: 00000000 ff760514
+ffff0138: 00000000 ff33c000
+ffff0140: 00000000 ff33c180
 
 ; subroutine, called from below
 
@@ -848,14 +851,15 @@ ffff0a24:	90ffc681 	adrp	x1, 0xff8c0000
 ffff0a28:	b9000020 	str	w0, [x1]
 ffff0a2c:	d65f03c0 	ret
 
+; Many calls to this routine.
 ffff0a30:	d10043ff 	sub	sp, sp, #0x10
 ffff0a34:	a9007bfd 	stp	x29, x30, [sp]
 ffff0a38:	910003fd 	mov	x29, sp
 ffff0a3c:	90ffc681 	adrp	x1, 0xff8c0000
-ffff0a40:	b9400021 	ldr	w1, [x1]
+ffff0a40:	b9400021 	ldr	w1, [x1]		; read SRAM[0]
 ffff0a44:	1b007c20 	mul	w0, w1, w0
 ffff0a48:	7100603f 	cmp	w1, #0x18
-ffff0a4c:	540000c1 	b.ne	0xffff0a64  // b.any
+ffff0a4c:	540000c1 	b.ne	0xffff0a64
 ffff0a50:	5283ffe1 	mov	w1, #0x1fff                	// #8191
 ffff0a54:	52800ea2 	mov	w2, #0x75                  	// #117
 ffff0a58:	1b020400 	madd	w0, w0, w2, w1
@@ -5073,383 +5077,292 @@ ffff4b80:	14000000 	b	0xffff4b80
 
 ffff4b84:	5253 414b	"RSAK"
 
-; data below here?
 ; this looks like a block of 64 bit constants.
 
-ffff4b88:	ffff0d40 	.inst	0xffff0d40 ; undefined
-ffff4b8c:	00000000 	udf	#0
-ffff4b90:	ffff1184 	.inst	0xffff1184 ; undefined
-ffff4b94:	00000000 	udf	#0
-ffff4b98:	ffff11ec 	.inst	0xffff11ec ; undefined
-ffff4b9c:	00000000 	udf	#0
-ffff4ba0:	0000000d 	udf	#13
-ffff4ba4:	00000003 	udf	#3
-ffff4ba8:	ffff0e3c 	.inst	0xffff0e3c ; undefined
-ffff4bac:	00000000 	udf	#0
-ffff4bb0:	ffff1184 	.inst	0xffff1184 ; undefined
-ffff4bb4:	00000000 	udf	#0
-ffff4bb8:	ffff11ec 	.inst	0xffff11ec ; undefined
-ffff4bbc:	00000000 	udf	#0
-ffff4bc0:	0000000d 	udf	#13
-ffff4bc4:	00000004 	udf	#4
-ffff4bc8:	ffff13e4 	.inst	0xffff13e4 ; undefined
-ffff4bcc:	00000000 	udf	#0
-ffff4bd0:	ffff12d0 	.inst	0xffff12d0 ; undefined
-ffff4bd4:	00000000 	udf	#0
-ffff4bd8:	ffff136c 	.inst	0xffff136c ; undefined
-ffff4bdc:	00000000 	udf	#0
-ffff4be0:	00000005 	udf	#5
-ffff4be4:	00000002 	udf	#2
-ffff4be8:	ffff17a4 	.inst	0xffff17a4 ; undefined
-ffff4bec:	00000000 	udf	#0
-ffff4bf0:	ffff237c 	.inst	0xffff237c ; undefined
-ffff4bf4:	00000000 	udf	#0
-ffff4bf8:	ffff2428 	.inst	0xffff2428 ; undefined
-ffff4bfc:	00000000 	udf	#0
-ffff4c00:	00000005 	udf	#5
-ffff4c04:	00000005 	udf	#5
-ffff4c08:	02000112 	.inst	0x02000112 ; undefined
-ffff4c0c:	40000000 	.inst	0x40000000 ; undefined
-ffff4c10:	330c2207 	bfi	w7, w16, #20, #9
-ffff4c14:	00000100 	udf	#256
-ffff4c18:	00000100 	udf	#256
-ffff4c1c:	00200209 	.inst	0x00200209 ; NYI
-ffff4c20:	80000101 	.inst	0x80000101 ; undefined
-ffff4c24:	000409c8 	.inst	0x000409c8 ; undefined
-ffff4c28:	06ff0200 	.inst	0x06ff0200 ; undefined
-ffff4c2c:	05070005 	.inst	0x05070005 ; undefined
-ffff4c30:	02000281 	.inst	0x02000281 ; undefined
-ffff4c34:	02050700 	.inst	0x02050700 ; undefined
-ffff4c38:	00020002 	.inst	0x00020002 ; undefined
-ffff4c3c:	00000000 	udf	#0
-ffff4c40:	ffff3a70 	.inst	0xffff3a70 ; undefined
-ffff4c44:	00000000 	udf	#0
-ffff4c48:	ffff3a70 	.inst	0xffff3a70 ; undefined
-ffff4c4c:	00000000 	udf	#0
-ffff4c50:	ffff3ab0 	.inst	0xffff3ab0 ; undefined
-ffff4c54:	00000000 	udf	#0
-ffff4c58:	ffff3a70 	.inst	0xffff3a70 ; undefined
-ffff4c5c:	00000000 	udf	#0
-ffff4c60:	ffff3960 	.inst	0xffff3960 ; undefined
-ffff4c64:	00000000 	udf	#0
-ffff4c68:	62987d7a 	.inst	0x62987d7a ; undefined
-ffff4c6c:	00000000 	udf	#0
-ffff4c70:	be3d3a96 	.inst	0xbe3d3a96 ; undefined
-ffff4c74:	00000000 	udf	#0
-ffff4c78:	1246c185 	.inst	0x1246c185 ; undefined
-ffff4c7c:	00000000 	udf	#0
-ffff4c80:	89ebc6ac 	.inst	0x89ebc6ac ; undefined
-ffff4c84:	00000000 	udf	#0
-ffff4c88:	780fbd97 	strh	w23, [x12, #0xfb]!
-ffff4c8c:	00000000 	udf	#0
-ffff4c90:	e2b5da8b 	.inst	0xe2b5da8b ; undefined
-ffff4c94:	00000000 	udf	#0
-ffff4c98:	dc613427 	.inst	0xdc613427 ; undefined
-ffff4c9c:	00000000 	udf	#0
-ffff4ca0:	0ee6f5ed 	.inst	0x0ee6f5ed ; undefined
-ffff4ca4:	00000000 	udf	#0
-ffff4ca8:	72eceed6 	.inst	0x72eceed6 ; undefined
-ffff4cac:	00000000 	udf	#0
-ffff4cb0:	4f041a31 	fmla	v17.8h, v17.8h, v4.h[4]
-ffff4cb4:	00000000 	udf	#0
-ffff4cb8:	254e70db 	bics	p11.b, p12/z, p6.b, p14.b
-ffff4cbc:	00000000 	udf	#0
-ffff4cc0:	6fc37ece 	.inst	0x6fc37ece ; undefined
-ffff4cc4:	00000000 	udf	#0
-ffff4cc8:	9059793c 	adrp	x28, 0xb2f18000
-ffff4ccc:	00000000 	udf	#0
-ffff4cd0:	c9335374 	.inst	0xc9335374 ; undefined
-ffff4cd4:	00000000 	udf	#0
-ffff4cd8:	42115884 	.inst	0x42115884 ; undefined
-ffff4cdc:	00000000 	udf	#0
-ffff4ce0:	755b5d0a 	.inst	0x755b5d0a ; undefined
-ffff4ce4:	00000000 	udf	#0
-ffff4ce8:	40c8b067 	.inst	0x40c8b067 ; undefined
-ffff4cec:	00000000 	udf	#0
-ffff4cf0:	cd602d2f 	.inst	0xcd602d2f ; undefined
-ffff4cf4:	00000000 	udf	#0
-ffff4cf8:	249c555e 	cmpgt	p14.s, p5/z, z10.s, z28.d
-ffff4cfc:	00000000 	udf	#0
-ffff4d00:	e0aa717c 	.inst	0xe0aa717c ; undefined
-ffff4d04:	00000000 	udf	#0
-ffff4d08:	cc6b8613 	.inst	0xcc6b8613 ; undefined
-ffff4d0c:	00000000 	udf	#0
-ffff4d10:	b4fea3a8 	cbz	x8, 0xffff2184
-ffff4d14:	00000000 	udf	#0
-ffff4d18:	17191076 	b	0xfc638ef0
-ffff4d1c:	00000000 	udf	#0
-ffff4d20:	1429bff3 	b	0xa64cec
-ffff4d24:	00000000 	udf	#0
-ffff4d28:	5f2c2a0b 	.inst	0x5f2c2a0b ; undefined
-ffff4d2c:	00000000 	udf	#0
-ffff4d30:	41fff748 	.inst	0x41fff748 ; undefined
-ffff4d34:	00000000 	udf	#0
-ffff4d38:	d3056ad8 	.inst	0xd3056ad8 ; undefined
-ffff4d3c:	00000000 	udf	#0
-ffff4d40:	d477355c 	.inst	0xd477355c ; undefined
-ffff4d44:	00000000 	udf	#0
-ffff4d48:	e4267ff1 	st2b	{z17.b, z18.b}, p7, [sp, x6]
-ffff4d4c:	00000000 	udf	#0
-ffff4d50:	00f0471c 	.inst	0x00f0471c ; undefined
-ffff4d54:	00000000 	udf	#0
-ffff4d58:	9a8eb822 	.inst	0x9a8eb822 ; undefined
-ffff4d5c:	00000000 	udf	#0
-ffff4d60:	a74d2bbc 	.inst	0xa74d2bbc ; undefined
-ffff4d64:	00000000 	udf	#0
-ffff4d68:	3b203609 	.inst	0x3b203609 ; undefined
-ffff4d6c:	00000000 	udf	#0
-ffff4d70:	8f9dc266 	.inst	0x8f9dc266 ; undefined
-ffff4d74:	00000000 	udf	#0
-ffff4d78:	e1f87bf9 	.inst	0xe1f87bf9 ; undefined
-ffff4d7c:	00000000 	udf	#0
-ffff4d80:	e8e76980 	.inst	0xe8e76980 ; undefined
-ffff4d84:	00000000 	udf	#0
-ffff4d88:	3ebba592 	.inst	0x3ebba592 ; undefined
-ffff4d8c:	00000000 	udf	#0
-ffff4d90:	9b308ad2 	smsubl	x18, w22, w16, x2
-ffff4d94:	00000000 	udf	#0
-ffff4d98:	4916afd0 	.inst	0x4916afd0 ; undefined
-ffff4d9c:	00000000 	udf	#0
-ffff4da0:	ca4aa2cb 	eor	x11, x22, x10, lsr #40
-ffff4da4:	00000000 	udf	#0
-ffff4da8:	9f64d51e 	.inst	0x9f64d51e ; undefined
-ffff4dac:	00000000 	udf	#0
-ffff4db0:	c7d1f4e9 	.inst	0xc7d1f4e9 ; undefined
-ffff4db4:	00000000 	udf	#0
-ffff4db8:	c5b7886e 	.inst	0xc5b7886e ; undefined
-ffff4dbc:	00000000 	udf	#0
-ffff4dc0:	56abb344 	.inst	0x56abb344 ; undefined
-ffff4dc4:	00000000 	udf	#0
-ffff4dc8:	4c6883fd 	.inst	0x4c6883fd ; undefined
-ffff4dcc:	00000000 	udf	#0
-ffff4dd0:	9ea1b9ae 	.inst	0x9ea1b9ae ; undefined
-ffff4dd4:	00000000 	udf	#0
-ffff4dd8:	43ea1f08 	.inst	0x43ea1f08 ; undefined
-ffff4ddc:	00000000 	udf	#0
-ffff4de0:	816dfa15 	.inst	0x816dfa15 ; undefined
-ffff4de4:	00000000 	udf	#0
-ffff4de8:	028c2ed9 	.inst	0x028c2ed9 ; undefined
-ffff4dec:	00000000 	udf	#0
-ffff4df0:	52b632ef 	mov	w15, #0xb1970000            	// #-1315504128
-ffff4df4:	00000000 	udf	#0
-ffff4df8:	215a0cdf 	.inst	0x215a0cdf ; undefined
-ffff4dfc:	00000000 	udf	#0
-ffff4e00:	fb5028cf 	.inst	0xfb5028cf ; undefined
-ffff4e04:	00000000 	udf	#0
-ffff4e08:	45013f39 	.inst	0x45013f39 ; undefined
-ffff4e0c:	00000000 	udf	#0
-ffff4e10:	51b263d7 	.inst	0x51b263d7 ; undefined
-ffff4e14:	00000000 	udf	#0
-ffff4e18:	a49123de 	.inst	0xa49123de ; undefined
-ffff4e1c:	00000000 	udf	#0
-ffff4e20:	65dde354 	facgt	p4.d, p0/z, z26.d, z29.d
-ffff4e24:	00000000 	udf	#0
-ffff4e28:	99731d07 	.inst	0x99731d07 ; undefined
-ffff4e2c:	00000000 	udf	#0
-ffff4e30:	ad1ba093 	stp	q19, q8, [x4, #0x370]
-ffff4e34:	00000000 	udf	#0
-ffff4e38:	c4a9066c 	ld1sh	{z12.d}, p1/z, [x19, z9.d, uxtw #1]
-ffff4e3c:	00000000 	udf	#0
-ffff4e40:	e5948737 	st1d	{z23.d}, p1, [x25, z20.d, uxtw]
-ffff4e44:	00000000 	udf	#0
-ffff4e48:	1895c003 	ldr	w3, 0xfff20648
-ffff4e4c:	00000000 	udf	#0
-ffff4e50:	f282b14b 	movk	x11, #0x158a
-ffff4e54:	00000000 	udf	#0
-ffff4e58:	5738ba8d 	.inst	0x5738ba8d ; undefined
-ffff4e5c:	00000000 	udf	#0
-ffff4e60:	fca60df6 	.inst	0xfca60df6 ; undefined
-ffff4e64:	00000000 	udf	#0
+ffff4b88: 00000000 ffff0d40
+ffff4b90: 00000000 ffff1184
+ffff4b98: 00000000 ffff11ec
+ffff4ba0: 00000003 0000000d
+ffff4ba8: 00000000 ffff0e3c
+ffff4bb0: 00000000 ffff1184
+ffff4bb8: 00000000 ffff11ec
+ffff4bc0: 00000004 0000000d
+ffff4bc8: 00000000 ffff13e4
+ffff4bd0: 00000000 ffff12d0
+ffff4bd8: 00000000 ffff136c
+ffff4be0: 00000002 00000005
+ffff4be8: 00000000 ffff17a4
+ffff4bf0: 00000000 ffff237c
+ffff4bf8: 00000000 ffff2428
+ffff4c00: 00000005 00000005
+ffff4c08: 40000000 02000112
+ffff4c10: 00000100 330c2207
+ffff4c18: 00200209 00000100
+ffff4c20: 000409c8 80000101
+ffff4c28: 05070005 06ff0200
+ffff4c30: 02050700 02000281
+ffff4c38: 00000000 00020002
+ffff4c40: 00000000 ffff3a70
+ffff4c48: 00000000 ffff3a70
+ffff4c50: 00000000 ffff3ab0
+ffff4c58: 00000000 ffff3a70
+ffff4c60: 00000000 ffff3960
+ffff4c68: 00000000 62987d7a
+ffff4c70: 00000000 be3d3a96
+ffff4c78: 00000000 1246c185
+ffff4c80: 00000000 89ebc6ac
+ffff4c88: 00000000 780fbd97
+ffff4c90: 00000000 e2b5da8b
+ffff4c98: 00000000 dc613427
+ffff4ca0: 00000000 0ee6f5ed
+ffff4ca8: 00000000 72eceed6
+ffff4cb0: 00000000 4f041a31
+ffff4cb8: 00000000 254e70db
+ffff4cc0: 00000000 6fc37ece
+ffff4cc8: 00000000 9059793c
+ffff4cd0: 00000000 c9335374
+ffff4cd8: 00000000 42115884
+ffff4ce0: 00000000 755b5d0a
+ffff4ce8: 00000000 40c8b067
+ffff4cf0: 00000000 cd602d2f
+ffff4cf8: 00000000 249c555e
+ffff4d00: 00000000 e0aa717c
+ffff4d08: 00000000 cc6b8613
+ffff4d10: 00000000 b4fea3a8
+ffff4d18: 00000000 17191076
+ffff4d20: 00000000 1429bff3
+ffff4d28: 00000000 5f2c2a0b
+ffff4d30: 00000000 41fff748
+ffff4d38: 00000000 d3056ad8
+ffff4d40: 00000000 d477355c
+ffff4d48: 00000000 e4267ff1
+ffff4d50: 00000000 00f0471c
+ffff4d58: 00000000 9a8eb822
+ffff4d60: 00000000 a74d2bbc
+ffff4d68: 00000000 3b203609
+ffff4d70: 00000000 8f9dc266
+ffff4d78: 00000000 e1f87bf9
+ffff4d80: 00000000 e8e76980
+ffff4d88: 00000000 3ebba592
+ffff4d90: 00000000 9b308ad2
+ffff4d98: 00000000 4916afd0
+ffff4da0: 00000000 ca4aa2cb
+ffff4da8: 00000000 9f64d51e
+ffff4db0: 00000000 c7d1f4e9
+ffff4db8: 00000000 c5b7886e
+ffff4dc0: 00000000 56abb344
+ffff4dc8: 00000000 4c6883fd
+ffff4dd0: 00000000 9ea1b9ae
+ffff4dd8: 00000000 43ea1f08
+ffff4de0: 00000000 816dfa15
+ffff4de8: 00000000 028c2ed9
+ffff4df0: 00000000 52b632ef
+ffff4df8: 00000000 215a0cdf
+ffff4e00: 00000000 fb5028cf
+ffff4e08: 00000000 45013f39
+ffff4e10: 00000000 51b263d7
+ffff4e18: 00000000 a49123de
+ffff4e20: 00000000 65dde354
+ffff4e28: 00000000 99731d07
+ffff4e30: 00000000 ad1ba093
+ffff4e38: 00000000 c4a9066c
+ffff4e40: 00000000 e5948737
+ffff4e48: 00000000 1895c003
+ffff4e50: 00000000 f282b14b
+ffff4e58: 00000000 5738ba8d
+ffff4e60: 00000000 fca60df6
+
+; This is a curious 8 bytes of text.
 
 ffff4e68:	524b 3333 5253 414b           "RK33RSAK"
 
 ; A big block of 32 bit constants follow.
 ; These are typically used by adrp instructions in the code above.
 
-ffff4e70:	ff790004 	.inst	0xff790004 ; undefined
-ffff4e74:	ff33c000 	.inst	0xff33c000 ; undefined
-ffff4e78:	ff33e00c 	.inst	0xff33e00c ; undefined
-ffff4e7c:	ff33c200 	.inst	0xff33c200 ; undefined
-ffff4e80:	ff8b000c 	.inst	0xff8b000c ; undefined
-ffff4e84:	ff8b0188 	.inst	0xff8b0188 ; undefined
-ffff4e88:	ff8b0180 	.inst	0xff8b0180 ; undefined
-ffff4e8c:	ff8b0008 	.inst	0xff8b0008 ; undefined
-ffff4e90:	ff8b0008 	.inst	0xff8b0008 ; undefined
-ffff4e94:	ff8b001c 	.inst	0xff8b001c ; undefined
-ffff4e98:	ff8b0020 	.inst	0xff8b0020 ; undefined
-ffff4e9c:	ff8b0008 	.inst	0xff8b0008 ; undefined
-ffff4ea0:	ff8b0184 	.inst	0xff8b0184 ; undefined
-ffff4ea4:	ff8b018c 	.inst	0xff8b018c ; undefined
-ffff4ea8:	ff8b0008 	.inst	0xff8b0008 ; undefined
-ffff4eac:	ff8b0184 	.inst	0xff8b0184 ; undefined
-ffff4eb0:	ff8b018c 	.inst	0xff8b018c ; undefined
-ffff4eb4:	ff8b0400 	.inst	0xff8b0400 ; undefined
-ffff4eb8:	ff8b0600 	.inst	0xff8b0600 ; undefined
-ffff4ebc:	ff8b0700 	.inst	0xff8b0700 ; undefined
-ffff4ec0:	ff8b0500 	.inst	0xff8b0500 ; undefined
-ffff4ec4:	ff8b0008 	.inst	0xff8b0008 ; undefined
-ffff4ec8:	ff8b0008 	.inst	0xff8b0008 ; undefined
-ffff4ecc:	ff8b0400 	.inst	0xff8b0400 ; undefined
-ffff4ed0:	ff760428 	.inst	0xff760428 ; undefined
-ffff4ed4:	ff76042c 	.inst	0xff76042c ; undefined
-ffff4ed8:	ff8b0280 	.inst	0xff8b0280 ; undefined
-ffff4edc:	ff8b0008 	.inst	0xff8b0008 ; undefined
-ffff4ee0:	ff8b0400 	.inst	0xff8b0400 ; undefined
-ffff4ee4:	ff8b0600 	.inst	0xff8b0600 ; undefined
-ffff4ee8:	ff8b0700 	.inst	0xff8b0700 ; undefined
-ffff4eec:	ff8b0500 	.inst	0xff8b0500 ; undefined
-ffff4ef0:	ff8b0008 	.inst	0xff8b0008 ; undefined
-ffff4ef4:	ff8b0184 	.inst	0xff8b0184 ; undefined
-ffff4ef8:	ff8b018c 	.inst	0xff8b018c ; undefined
-ffff4efc:	ff8b041c 	.inst	0xff8b041c ; undefined
-ffff4f00:	ff8b0418 	.inst	0xff8b0418 ; undefined
-ffff4f04:	ff8b0414 	.inst	0xff8b0414 ; undefined
-ffff4f08:	ff8b0410 	.inst	0xff8b0410 ; undefined
-ffff4f0c:	ff8b040c 	.inst	0xff8b040c ; undefined
-ffff4f10:	ff8b0408 	.inst	0xff8b0408 ; undefined
-ffff4f14:	ff8b0404 	.inst	0xff8b0404 ; undefined
-ffff4f18:	ff8b0400 	.inst	0xff8b0400 ; undefined
-ffff4f1c:	ff8b000c 	.inst	0xff8b000c ; undefined
-ffff4f20:	ff8b0188 	.inst	0xff8b0188 ; undefined
-ffff4f24:	ff8b0180 	.inst	0xff8b0180 ; undefined
-ffff4f28:	ff8b0008 	.inst	0xff8b0008 ; undefined
-ffff4f2c:	ff8b001c 	.inst	0xff8b001c ; undefined
-ffff4f30:	ff8b0020 	.inst	0xff8b0020 ; undefined
-ffff4f34:	00df0043 	.inst	0x00df0043 ; undefined
-ffff4f38:	ff760160 	.inst	0xff760160 ; undefined
-ffff4f3c:	ff33e018 	.inst	0xff33e018 ; undefined
-ffff4f40:	ff76000c 	.inst	0xff76000c ; undefined
-ffff4f44:	ff76008c 	.inst	0xff76008c ; undefined
-ffff4f48:	ff760100 	.inst	0xff760100 ; undefined
-ffff4f4c:	ff760104 	.inst	0xff760104 ; undefined
-ffff4f50:	00df0040 	.inst	0x00df0040 ; undefined
-ffff4f54:	ff760110 	.inst	0xff760110 ; undefined
-ffff4f58:	9fdf8040 	.inst	0x9fdf8040 ; undefined
-ffff4f5c:	ff760114 	.inst	0xff760114 ; undefined
-ffff4f60:	ff760130 	.inst	0xff760130 ; undefined
-ffff4f64:	739f0080 	.inst	0x739f0080 ; undefined
-ffff4f68:	ff760138 	.inst	0xff760138 ; undefined
-ffff4f6c:	ff76015c 	.inst	0xff76015c ; undefined
-ffff4f70:	079f0080 	.inst	0x079f0080 ; undefined
-ffff4f74:	ff760164 	.inst	0xff760164 ; undefined
-ffff4f78:	ff7601e4 	.inst	0xff7601e4 ; undefined
-ffff4f7c:	ff76000c 	.inst	0xff76000c ; undefined
-ffff4f80:	0fff00c8 	.inst	0x0fff00c8 ; undefined
-ffff4f84:	773f1403 	.inst	0x773f1403 ; undefined
-ffff4f88:	ff760004 	.inst	0xff760004 ; undefined
-ffff4f8c:	ff76008c 	.inst	0xff76008c ; undefined
-ffff4f90:	0fff00c0 	.inst	0x0fff00c0 ; undefined
-ffff4f94:	ff760080 	.inst	0xff760080 ; undefined
-ffff4f98:	773f2302 	.inst	0x773f2302 ; undefined
-ffff4f9c:	ff760084 	.inst	0xff760084 ; undefined
-ffff4fa0:	ff760514 	.inst	0xff760514 ; undefined
-ffff4fa4:	1fdf0101 	fmadd	h1, h8, h31, h0
-ffff4fa8:	ff760100 	.inst	0xff760100 ; undefined
-ffff4fac:	1fdf0100 	fmadd	h0, h8, h31, h0
-ffff4fb0:	1f1f0303 	fmadd	s3, s24, s31, s0
-ffff4fb4:	ff760104 	.inst	0xff760104 ; undefined
-ffff4fb8:	00df0043 	.inst	0x00df0043 ; undefined
-ffff4fbc:	ff760110 	.inst	0xff760110 ; undefined
-ffff4fc0:	9fdf8341 	.inst	0x9fdf8341 ; undefined
-ffff4fc4:	ff760114 	.inst	0xff760114 ; undefined
-ffff4fc8:	739f0100 	.inst	0x739f0100 ; undefined
-ffff4fcc:	ff760130 	.inst	0xff760130 ; undefined
-ffff4fd0:	739f3181 	.inst	0x739f3181 ; undefined
-ffff4fd4:	ff760138 	.inst	0xff760138 ; undefined
-ffff4fd8:	ff76015c 	.inst	0xff76015c ; undefined
-ffff4fdc:	079f0183 	.inst	0x079f0183 ; undefined
-ffff4fe0:	ff760164 	.inst	0xff760164 ; undefined
-ffff4fe4:	001f8300 	.inst	0x001f8300 ; undefined
-ffff4fe8:	ff7601e0 	.inst	0xff7601e0 ; undefined
-ffff4fec:	001f0005 	.inst	0x001f0005 ; undefined
-ffff4ff0:	ff7601e4 	.inst	0xff7601e4 ; undefined
-ffff4ff4:	03000100 	.inst	0x03000100 ; undefined
-ffff4ff8:	ff008f00 	.inst	0xff008f00 ; undefined
-ffff4ffc:	ff7601ec 	.inst	0xff7601ec ; undefined
-ffff5000:	ff1d0010 	.inst	0xff1d0010 ; undefined
-ffff5004:	c0008000 	.inst	0xc0008000 ; undefined
-ffff5008:	ff320010 	.inst	0xff320010 ; undefined
-ffff500c:	003f002a 	.inst	0x003f002a ; NYI
-ffff5010:	ff320014 	.inst	0xff320014 ; undefined
-ffff5014:	ff1d0008 	.inst	0xff1d0008 ; undefined
-ffff5018:	ff1d000c 	.inst	0xff1d000c ; undefined
-ffff501c:	ff1d0400 	.inst	0xff1d0400 ; undefined
-ffff5020:	ff1d0024 	.inst	0xff1d0024 ; undefined
-ffff5024:	ff1d0800 	.inst	0xff1d0800 ; undefined
-ffff5028:	0010113a 	.inst	0x0010113a ; undefined
-ffff502c:	0010123a 	.inst	0x0010123a ; undefined
-ffff5030:	0010113a 	.inst	0x0010113a ; undefined
-ffff5034:	40ff8000 	.inst	0x40ff8000 ; undefined
-ffff5038:	80ff8000 	.inst	0x80ff8000 ; undefined
-ffff503c:	c0ff8000 	.inst	0xc0ff8000 ; undefined
-ffff5040:	03b70200 	.inst	0x03b70200 ; undefined
-ffff5044:	40ff8000 	.inst	0x40ff8000 ; undefined
-ffff5048:	c0ff8000 	.inst	0xc0ff8000 ; undefined
-ffff504c:	80ff8000 	.inst	0x80ff8000 ; undefined
-ffff5050:	00012147 	.inst	0x00012147 ; undefined
-ffff5054:	80202000 	.inst	0x80202000 ; NYI
-ffff5058:	077f0500 	.inst	0x077f0500 ; undefined
-ffff505c:	ff760140 	.inst	0xff760140 ; undefined
-ffff5060:	fe330200 	.inst	0xfe330200 ; undefined
-ffff5064:	fe320200 	.inst	0xfe320200 ; undefined
-ffff5068:	000186a1 	.inst	0x000186a1 ; undefined
-ffff506c:	0003d091 	.inst	0x0003d091 ; undefined
-ffff5070:	9f008300 	.inst	0x9f008300 ; undefined
-ffff5074:	ff760134 	.inst	0xff760134 ; undefined
-ffff5078:	077f051f 	.inst	0x077f051f ; undefined
-ffff507c:	ff760140 	.inst	0xff760140 ; undefined
-ffff5080:	00060004 	.inst	0x00060004 ; undefined
-ffff5084:	ff760580 	.inst	0xff760580 ; undefined
-ffff5088:	c0004000 	.inst	0xc0004000 ; undefined
-ffff508c:	0fff0555 	.inst	0x0fff0555 ; undefined
-ffff5090:	ff77e024 	.inst	0xff77e024 ; undefined
-ffff5094:	80202000 	.inst	0x80202000 ; NYI
-ffff5098:	307f0080 	adr	x0, 0xf30a9
-ffff509c:	fe330028 	.inst	0xfe330028 ; undefined
-ffff50a0:	fe33002c 	.inst	0xfe33002c ; undefined
-ffff50a4:	077f0400 	.inst	0x077f0400 ; undefined
-ffff50a8:	ff760158 	.inst	0xff760158 ; undefined
-ffff50ac:	fe330004 	.inst	0xfe330004 ; undefined
-ffff50b0:	fe330006 	.inst	0xfe330006 ; undefined
-ffff50b4:	fe33000c 	.inst	0xfe33000c ; undefined
-ffff50b8:	fe330008 	.inst	0xfe330008 ; undefined
-ffff50bc:	fe33000e 	.inst	0xfe33000e ; undefined
-ffff50c0:	fe330030 	.inst	0xfe330030 ; undefined
-ffff50c4:	000f0001 	.inst	0x000f0001 ; undefined
-ffff50c8:	0003d090 	.inst	0x0003d090 ; undefined
-ffff50cc:	fe330024 	.inst	0xfe330024 ; undefined
-ffff50d0:	fe330020 	.inst	0xfe330020 ; undefined
-ffff50d4:	0007a120 	.inst	0x0007a120 ; undefined
-ffff50d8:	00700002 	.inst	0x00700002 ; undefined
-ffff50dc:	fffc2f6f 	.inst	0xfffc2f6f ; undefined
-ffff50e0:	fe330010 	.inst	0xfe330010 ; undefined
-ffff50e4:	fe330024 	.inst	0xfe330024 ; undefined
-ffff50e8:	fff85edf 	.inst	0xfff85edf ; undefined
-ffff50ec:	fe33002f 	.inst	0xfe33002f ; undefined
-ffff50f0:	009f0083 	.inst	0x009f0083 ; undefined
-ffff50f4:	ff760154 	.inst	0xff760154 ; undefined
-ffff50f8:	077f043f 	.inst	0x077f043f ; undefined
-ffff50fc:	ff760158 	.inst	0xff760158 ; undefined
-ffff5100:	ff77f798 	.inst	0xff77f798 ; undefined
-ffff5104:	0c000400 	st4	{v0.4h-v3.4h}, [x0]
-ffff5108:	fe330029 	.inst	0xfe330029 ; undefined
-ffff510c:	fe33002c 	.inst	0xfe33002c ; undefined
-ffff5110:	fe33002e 	.inst	0xfe33002e ; undefined
-ffff5114:	00ff0003 	.inst	0x00ff0003 ; undefined
-ffff5118:	fe330034 	.inst	0xfe330034 ; undefined
-ffff511c:	0001414c 	.inst	0x0001414c ; undefined
-ffff5120:	fcdc8c3b 	.inst	0xfcdc8c3b ; undefined
-ffff5124:	ff33e014 	.inst	0xff33e014 ; undefined
-ffff5128:	fe80c100 	.inst	0xfe80c100 ; undefined
-ffff512c:	fe80c704 	.inst	0xfe80c704 ; undefined
-ffff5130:	bfffc2f7 	.inst	0xbfffc2f7 ; undefined
-ffff5134:	00020009 	.inst	0x00020009 ; undefined
-ffff5138:	fffa0004 	.inst	0xfffa0004 ; undefined
-ffff513c:	fffa0008 	.inst	0xfffa0008 ; undefined
-ffff5140:	0010010c 	.inst	0x0010010c ; undefined
-ffff5144:	0010010e 	.inst	0x0010010e ; undefined
-ffff5148:	fffa0004 	.inst	0xfffa0004 ; undefined
-ffff514c:	fffa0004 	.inst	0xfffa0004 ; undefined
+ffff4e70: ff790004
+ffff4e74: ff33c000
+ffff4e78: ff33e00c
+ffff4e7c: ff33c200
+ffff4e80: ff8b000c
+ffff4e84: ff8b0188
+ffff4e88: ff8b0180
+ffff4e8c: ff8b0008
+ffff4e90: ff8b0008
+ffff4e94: ff8b001c
+ffff4e98: ff8b0020
+ffff4e9c: ff8b0008
+ffff4ea0: ff8b0184
+ffff4ea4: ff8b018c
+ffff4ea8: ff8b0008
+ffff4eac: ff8b0184
+ffff4eb0: ff8b018c
+ffff4eb4: ff8b0400
+ffff4eb8: ff8b0600
+ffff4ebc: ff8b0700
+ffff4ec0: ff8b0500
+ffff4ec4: ff8b0008
+ffff4ec8: ff8b0008
+ffff4ecc: ff8b0400
+ffff4ed0: ff760428
+ffff4ed4: ff76042c
+ffff4ed8: ff8b0280
+ffff4edc: ff8b0008
+ffff4ee0: ff8b0400
+ffff4ee4: ff8b0600
+ffff4ee8: ff8b0700
+ffff4eec: ff8b0500
+ffff4ef0: ff8b0008
+ffff4ef4: ff8b0184
+ffff4ef8: ff8b018c
+ffff4efc: ff8b041c
+ffff4f00: ff8b0418
+ffff4f04: ff8b0414
+ffff4f08: ff8b0410
+ffff4f0c: ff8b040c
+ffff4f10: ff8b0408
+ffff4f14: ff8b0404
+ffff4f18: ff8b0400
+ffff4f1c: ff8b000c
+ffff4f20: ff8b0188
+ffff4f24: ff8b0180
+ffff4f28: ff8b0008
+ffff4f2c: ff8b001c
+ffff4f30: ff8b0020
+ffff4f34: 00df0043
+ffff4f38: ff760160
+ffff4f3c: ff33e018
+ffff4f40: ff76000c
+ffff4f44: ff76008c
+ffff4f48: ff760100
+ffff4f4c: ff760104
+ffff4f50: 00df0040
+ffff4f54: ff760110
+ffff4f58: 9fdf8040
+ffff4f5c: ff760114
+ffff4f60: ff760130
+ffff4f64: 739f0080
+ffff4f68: ff760138
+ffff4f6c: ff76015c
+ffff4f70: 079f0080
+ffff4f74: ff760164
+ffff4f78: ff7601e4
+ffff4f7c: ff76000c
+ffff4f80: 0fff00c8
+ffff4f84: 773f1403
+ffff4f88: ff760004
+ffff4f8c: ff76008c
+ffff4f90: 0fff00c0
+ffff4f94: ff760080
+ffff4f98: 773f2302
+ffff4f9c: ff760084
+ffff4fa0: ff760514
+ffff4fa4: 1fdf0101
+ffff4fa8: ff760100
+ffff4fac: 1fdf0100
+ffff4fb0: 1f1f0303
+ffff4fb4: ff760104
+ffff4fb8: 00df0043
+ffff4fbc: ff760110
+ffff4fc0: 9fdf8341
+ffff4fc4: ff760114
+ffff4fc8: 739f0100
+ffff4fcc: ff760130
+ffff4fd0: 739f3181
+ffff4fd4: ff760138
+ffff4fd8: ff76015c
+ffff4fdc: 079f0183
+ffff4fe0: ff760164
+ffff4fe4: 001f8300
+ffff4fe8: ff7601e0
+ffff4fec: 001f0005
+ffff4ff0: ff7601e4
+ffff4ff4: 03000100
+ffff4ff8: ff008f00
+ffff4ffc: ff7601ec
+ffff5000: ff1d0010
+ffff5004: c0008000
+ffff5008: ff320010
+ffff500c: 003f002a
+ffff5010: ff320014
+ffff5014: ff1d0008
+ffff5018: ff1d000c
+ffff501c: ff1d0400
+ffff5020: ff1d0024
+ffff5024: ff1d0800
+ffff5028: 0010113a
+ffff502c: 0010123a
+ffff5030: 0010113a
+ffff5034: 40ff8000
+ffff5038: 80ff8000
+ffff503c: c0ff8000
+ffff5040: 03b70200
+ffff5044: 40ff8000
+ffff5048: c0ff8000
+ffff504c: 80ff8000
+ffff5050: 00012147
+ffff5054: 80202000
+ffff5058: 077f0500
+ffff505c: ff760140
+ffff5060: fe330200
+ffff5064: fe320200
+ffff5068: 000186a1
+ffff506c: 0003d091
+ffff5070: 9f008300
+ffff5074: ff760134
+ffff5078: 077f051f
+ffff507c: ff760140
+ffff5080: 00060004
+ffff5084: ff760580
+ffff5088: c0004000
+ffff508c: 0fff0555
+ffff5090: ff77e024
+ffff5094: 80202000
+ffff5098: 307f0080
+ffff509c: fe330028
+ffff50a0: fe33002c
+ffff50a4: 077f0400
+ffff50a8: ff760158
+ffff50ac: fe330004
+ffff50b0: fe330006
+ffff50b4: fe33000c
+ffff50b8: fe330008
+ffff50bc: fe33000e
+ffff50c0: fe330030
+ffff50c4: 000f0001
+ffff50c8: 0003d090
+ffff50cc: fe330024
+ffff50d0: fe330020
+ffff50d4: 0007a120
+ffff50d8: 00700002
+ffff50dc: fffc2f6f
+ffff50e0: fe330010
+ffff50e4: fe330024
+ffff50e8: fff85edf
+ffff50ec: fe33002f
+ffff50f0: 009f0083
+ffff50f4: ff760154
+ffff50f8: 077f043f
+ffff50fc: ff760158
+ffff5100: ff77f798
+ffff5104: 0c000400
+ffff5108: fe330029
+ffff510c: fe33002c
+ffff5110: fe33002e
+ffff5114: 00ff0003
+ffff5118: fe330034
+ffff511c: 0001414c
+ffff5120: fcdc8c3b
+ffff5124: ff33e014
+ffff5128: fe80c100
+ffff512c: fe80c704
+ffff5130: bfffc2f7
+ffff5134: 00020009
+ffff5138: fffa0004
+ffff513c: fffa0008
+ffff5140: 0010010c
+ffff5144: 0010010e
+ffff5148: fffa0004
+ffff514c: fffa0004
 
 ; A huge block of zeros fills the bootrom from here,
 ; almost to the end
