@@ -23,6 +23,13 @@
 ;  the stack gets initialized in here at ff8c2000
 ;  and grows to smaller addresses.
 ;  ff8c0004 is special.
+;
+; As a side note.  Once we are running U-Boot, we cannot access
+; the SRAM, attempting to do so yields synchronous aborts.
+; This will make it hard to poke at the special memory locations
+; that will bring other cores out of the WFE loop.
+; So, we can only hope that someone else has done that for us,
+; and parked them someplace where we can get at them.
 
 ; =======================================================================
 
@@ -105,6 +112,14 @@
 ; then after the fetch, add 4 to x0.
 ; The third is called "pre indexing".  We add 4 to x1 first, then use
 ; that changed value to fetch from memory
+;
+; bl and ret handle subroutines
+; bl is "branch and link" and places the return in lr (x30)
+; ret returns by copying x30 into the pc
+; note that the stack is not involved at all,
+;  a subroutine which intends to call other subroutines will
+;  need to free up lr by pushing it onto the stack and restoring it
+;  a leaf subroutine won't need to do this at all.
 
 ; ==========================================================================
 ; ==========================================================================
@@ -241,8 +256,7 @@ ffff0130:	00000000ff760514
 ffff0138:	00000000ff33c000
 ffff0140:	00000000ff33c180
 
-; loop to here from below
-; it is not clear how/where we enter this.
+; subroutine, called from below
 
 ffff0148:	d10103ff 	sub	sp, sp, #0x40
 ffff014c:	a9037bfd 	stp	x29, x30, [sp, #48]
@@ -286,6 +300,8 @@ ffff01e0:	a9425ff6 	ldp	x22, x23, [sp, #32]
 ffff01e4:	a9437bfd 	ldp	x29, x30, [sp, #48]
 ffff01e8:	910103ff 	add	sp, sp, #0x40
 ffff01ec:	d65f03c0 	ret
+
+; subroutine
 ffff01f0:	d10143ff 	sub	sp, sp, #0x50
 ffff01f4:	a9047bfd 	stp	x29, x30, [sp, #64]
 ffff01f8:	910103fd 	add	x29, sp, #0x40
@@ -341,6 +357,8 @@ ffff02bc:	a94367f8 	ldp	x24, x25, [sp, #48]
 ffff02c0:	a9447bfd 	ldp	x29, x30, [sp, #64]
 ffff02c4:	910143ff 	add	sp, sp, #0x50
 ffff02c8:	d65f03c0 	ret
+
+; subroutine
 ffff02cc:	d10203ff 	sub	sp, sp, #0x80
 ffff02d0:	a9077bfd 	stp	x29, x30, [sp, #112]
 ffff02d4:	9101c3fd 	add	x29, sp, #0x70
@@ -370,10 +388,7 @@ ffff0330:	540005e3 	b.cc	0xffff03ec  // b.lo, b.ul, b.last
 ffff0334:	53092c15 	ubfx	w21, w0, #9, #3
 ffff0338:	910013e1 	add	x1, sp, #0x4
 ffff033c:	aa1503e0 	mov	x0, x21
-ffff0340:	97ffff82 	bl	0xffff0148		; big loop from above
-
-; ?? orphaned code here
-
+ffff0340:	97ffff82 	bl	0xffff0148
 ffff0344:	35000540 	cbnz	w0, 0xffff03ec
 ffff0348:	79402281 	ldrh	w1, [x20, #16]
 ffff034c:	b94007e0 	ldr	w0, [sp, #4]
@@ -387,9 +402,6 @@ ffff0368:	b9000ae0 	str	w0, [x23, #8]
 ffff036c:	b9001ad5 	str	w21, [x22, #24]
 ffff0370:	52800020 	mov	w0, #0x1                   	// #1
 ffff0374:	390032e0 	strb	w0, [x23, #12]
-
-; branched to from above
-
 ffff0378:	91008295 	add	x21, x20, #0x20
 ffff037c:	910023f6 	add	x22, sp, #0x8
 ffff0380:	52800101 	mov	w1, #0x8                   	// #8
@@ -426,6 +438,8 @@ ffff03f8:	a9465ff6 	ldp	x22, x23, [sp, #96]
 ffff03fc:	a9477bfd 	ldp	x29, x30, [sp, #112]
 ffff0400:	910203ff 	add	sp, sp, #0x80
 ffff0404:	d65f03c0 	ret
+
+; subroutine
 ffff0408:	d10083ff 	sub	sp, sp, #0x20
 ffff040c:	a9017bfd 	stp	x29, x30, [sp, #16]
 ffff0410:	910043fd 	add	x29, sp, #0x10
@@ -477,26 +491,34 @@ ffff04c4:	f94007f3 	ldr	x19, [sp, #8]
 ffff04c8:	a9417bfd 	ldp	x29, x30, [sp, #16]
 ffff04cc:	910083ff 	add	sp, sp, #0x20
 ffff04d0:	d65f03c0 	ret
+
+; subroutine
+; ff8b0000 is crypto0
 ffff04d4:	90000021 	adrp	x1, 0xffff4000
-ffff04d8:	b94e8021 	ldr	w1, [x1, #0xe80]
+ffff04d8:	b94e8021 	ldr	w1, [x1, #0xe80]	; ffff4e80: ff8b000c
 ffff04dc:	b9400022 	ldr	w2, [x1]
 ffff04e0:	321b0042 	orr	w2, w2, #0x20
 ffff04e4:	b9000022 	str	w2, [x1]
+
 ffff04e8:	90000021 	adrp	x1, 0xffff4000
-ffff04ec:	b94e8421 	ldr	w1, [x1, #0xe84]
+ffff04ec:	b94e8421 	ldr	w1, [x1, #0xe84]	; ffff4e84: ff8b0188
 ffff04f0:	b9000020 	str	w0, [x1]
+
 ffff04f4:	90000020 	adrp	x0, 0xffff4000
-ffff04f8:	b94e8801 	ldr	w1, [x0, #0xe88]
+ffff04f8:	b94e8801 	ldr	w1, [x0, #0xe88]	; ffff4e88: ff8b0180
 ffff04fc:	90000020 	adrp	x0, 0xffff4000
-ffff0500:	b94e8c00 	ldr	w0, [x0, #0xe8c]
-ffff0504:	52800142 	mov	w2, #0xa                   	// #10
+ffff0500:	b94e8c00 	ldr	w0, [x0, #0xe8c]	; ffff4e8c: ff8b0008
+ffff0504:	52800142 	mov	w2, #0xa		; w2 = 10
 ffff0508:	b9000022 	str	w2, [x1]
-ffff050c:	320a83e1 	mov	w1, #0x400040              	// #4194368
+
+ffff050c:	320a83e1 	mov	w1, #0x400040
 ffff0510:	b9000001 	str	w1, [x0]
 ffff0514:	b9400001 	ldr	w1, [x0]
-ffff0518:	3737ffe1 	tbnz	w1, #6, 0xffff0514
+ffff0518:	3737ffe1 	tbnz	w1, #6, 0xffff0514	; loop
 ffff051c:	aa1f03e0 	mov	x0, xzr
 ffff0520:	d65f03c0 	ret
+
+; subroutine
 ffff0524:	90000022 	adrp	x2, 0xffff4000
 ffff0528:	b94e9042 	ldr	w2, [x2, #0xe90]
 ffff052c:	b9400043 	ldr	w3, [x2]
@@ -516,6 +538,8 @@ ffff0560:	320d83e0 	mov	w0, #0x80008               	// #524296
 ffff0564:	b9000040 	str	w0, [x2]
 ffff0568:	aa1f03e0 	mov	x0, xzr
 ffff056c:	d65f03c0 	ret
+
+; subroutine
 ffff0570:	90000021 	adrp	x1, 0xffff4000
 ffff0574:	b94e9c21 	ldr	w1, [x1, #0xe9c]
 ffff0578:	b9400021 	ldr	w1, [x1]
@@ -534,6 +558,7 @@ ffff05a8:	f100803f 	cmp	x1, #0x20
 ffff05ac:	54ffff41 	b.ne	0xffff0594  // b.any
 ffff05b0:	aa1f03e0 	mov	x0, xzr
 ffff05b4:	d65f03c0 	ret
+
 ffff05b8:	d100c3ff 	sub	sp, sp, #0x30
 ffff05bc:	a9027bfd 	stp	x29, x30, [sp, #32]
 ffff05c0:	910083fd 	add	x29, sp, #0x20
@@ -817,9 +842,12 @@ ffff0a14:	d65f03c0 	ret
 ffff0a18:	90ffc680 	adrp	x0, 0xff8c0000
 ffff0a1c:	b9400000 	ldr	w0, [x0]
 ffff0a20:	d65f03c0 	ret
+
+; subroutine - write first 4 bytes of SRAM (SRAM[0])
 ffff0a24:	90ffc681 	adrp	x1, 0xff8c0000
 ffff0a28:	b9000020 	str	w0, [x1]
 ffff0a2c:	d65f03c0 	ret
+
 ffff0a30:	d10043ff 	sub	sp, sp, #0x10
 ffff0a34:	a9007bfd 	stp	x29, x30, [sp]
 ffff0a38:	910003fd 	mov	x29, sp
@@ -842,6 +870,7 @@ ffff0a78:	94000f05 	bl	0xffff468c
 ffff0a7c:	a9407bfd 	ldp	x29, x30, [sp]
 ffff0a80:	910043ff 	add	sp, sp, #0x10
 ffff0a84:	d65f03c0 	ret
+
 ffff0a88:	d10083ff 	sub	sp, sp, #0x20
 ffff0a8c:	a9017bfd 	stp	x29, x30, [sp, #16]
 ffff0a90:	910043fd 	add	x29, sp, #0x10
@@ -856,53 +885,67 @@ ffff0ab0:	f94007f3 	ldr	x19, [sp, #8]
 ffff0ab4:	a9417bfd 	ldp	x29, x30, [sp, #16]
 ffff0ab8:	910083ff 	add	sp, sp, #0x20
 ffff0abc:	d65f03c0 	ret
+
+; subroutine, called once during startup.
+; Writing a variety of stuff to ff76 addresses (CRU)
+; CRU is the clock and reset unit
 ffff0ac0:	90000020 	adrp	x0, 0xffff4000
-ffff0ac4:	b94f4000 	ldr	w0, [x0, #0xf40]
-ffff0ac8:	52a06001 	mov	w1, #0x3000000             	// #50331648
+ffff0ac4:	b94f4000 	ldr	w0, [x0, #0xf40] 	; ffff4f40: ff76000c
+ffff0ac8:	52a06001 	mov	w1, #0x3000000
 ffff0acc:	b9000001 	str	w1, [x0]
+
 ffff0ad0:	90000020 	adrp	x0, 0xffff4000
-ffff0ad4:	b94f4400 	ldr	w0, [x0, #0xf44]
+ffff0ad4:	b94f4400 	ldr	w0, [x0, #0xf44]	; ffff4f44: ff76008c
 ffff0ad8:	b9000001 	str	w1, [x0]
+
 ffff0adc:	90000020 	adrp	x0, 0xffff4000
-ffff0ae0:	b94f4800 	ldr	w0, [x0, #0xf48]
-ffff0ae4:	52a3fbe1 	mov	w1, #0x1fdf0000            	// #534708224
+ffff0ae0:	b94f4800 	ldr	w0, [x0, #0xf48]	; ffff4f48: ff760100
+ffff0ae4:	52a3fbe1 	mov	w1, #0x1fdf0000
 ffff0ae8:	b9000001 	str	w1, [x0]
+
 ffff0aec:	90000020 	adrp	x0, 0xffff4000
-ffff0af0:	b94f4c00 	ldr	w0, [x0, #0xf4c]
-ffff0af4:	52a3e3e1 	mov	w1, #0x1f1f0000            	// #522125312
+ffff0af0:	b94f4c00 	ldr	w0, [x0, #0xf4c]	; ffff4f4c: ff760104
+ffff0af4:	52a3e3e1 	mov	w1, #0x1f1f0000
 ffff0af8:	b9000001 	str	w1, [x0]
+
 ffff0afc:	90000020 	adrp	x0, 0xffff4000
-ffff0b00:	b94f5000 	ldr	w0, [x0, #0xf50]
+ffff0b00:	b94f5000 	ldr	w0, [x0, #0xf50]	; ffff4f50: 00df0040
 ffff0b04:	90000021 	adrp	x1, 0xffff4000
-ffff0b08:	b94f5421 	ldr	w1, [x1, #0xf54]
+ffff0b08:	b94f5421 	ldr	w1, [x1, #0xf54]	; ffff4f54: ff760110
 ffff0b0c:	b9000020 	str	w0, [x1]
+
 ffff0b10:	90000020 	adrp	x0, 0xffff4000
-ffff0b14:	b94f5800 	ldr	w0, [x0, #0xf58]
+ffff0b14:	b94f5800 	ldr	w0, [x0, #0xf58]	; ffff4f58: 9fdf8040
 ffff0b18:	90000021 	adrp	x1, 0xffff4000
-ffff0b1c:	b94f5c21 	ldr	w1, [x1, #0xf5c]
+ffff0b1c:	b94f5c21 	ldr	w1, [x1, #0xf5c]	; ffff4f5c: ff760114
 ffff0b20:	b9000020 	str	w0, [x1]
+
 ffff0b24:	90000020 	adrp	x0, 0xffff4000
-ffff0b28:	b94f6000 	ldr	w0, [x0, #0xf60]
-ffff0b2c:	52ae73e1 	mov	w1, #0x739f0000            	// #1939800064
+ffff0b28:	b94f6000 	ldr	w0, [x0, #0xf60]	; ffff4f60: ff760130
+ffff0b2c:	52ae73e1 	mov	w1, #0x739f0000
 ffff0b30:	b9000001 	str	w1, [x0]
+
 ffff0b34:	90000020 	adrp	x0, 0xffff4000
-ffff0b38:	b94f6400 	ldr	w0, [x0, #0xf64]
+ffff0b38:	b94f6400 	ldr	w0, [x0, #0xf64]	; ffff4f64: 739f0080
 ffff0b3c:	90000021 	adrp	x1, 0xffff4000
-ffff0b40:	b94f6821 	ldr	w1, [x1, #0xf68]
+ffff0b40:	b94f6821 	ldr	w1, [x1, #0xf68]	; ffff4f68: ff760138
 ffff0b44:	b9000020 	str	w0, [x1]
+
 ffff0b48:	90000021 	adrp	x1, 0xffff4000
-ffff0b4c:	b94f6c21 	ldr	w1, [x1, #0xf6c]
+ffff0b4c:	b94f6c21 	ldr	w1, [x1, #0xf6c]	; ffff4f6c: ff76015c
 ffff0b50:	90000022 	adrp	x2, 0xffff4000
-ffff0b54:	b94f7042 	ldr	w2, [x2, #0xf70]
+ffff0b54:	b94f7042 	ldr	w2, [x2, #0xf70]	; ffff4f70: 079f0080
 ffff0b58:	90000023 	adrp	x3, 0xffff4000
-ffff0b5c:	b94f7463 	ldr	w3, [x3, #0xf74]
+ffff0b5c:	b94f7463 	ldr	w3, [x3, #0xf74]	; ffff4f74: ff760164
 ffff0b60:	90000024 	adrp	x4, 0xffff4000
-ffff0b64:	b94f7884 	ldr	w4, [x4, #0xf78]
+ffff0b64:	b94f7884 	ldr	w4, [x4, #0xf78]	; ffff4f78: ff7601e4
 ffff0b68:	b9000020 	str	w0, [x1]
 ffff0b6c:	b9000062 	str	w2, [x3]
-ffff0b70:	52a003e0 	mov	w0, #0x1f0000              	// #2031616
+
+ffff0b70:	52a003e0 	mov	w0, #0x1f0000
 ffff0b74:	b9000080 	str	w0, [x4]
 ffff0b78:	d65f03c0 	ret
+
 ffff0b7c:	d10083ff 	sub	sp, sp, #0x20
 ffff0b80:	a9017bfd 	stp	x29, x30, [sp, #16]
 ffff0b84:	910043fd 	add	x29, sp, #0x10
@@ -4479,19 +4522,21 @@ ffff4338:	d65f03c0 	ret
 
 ; first core starting up comes here.  GO!
 ; it branches here, it does NOT do a "bl"
+;
+; My notation here SRAM[x] refers to 32 bit objects in SRAM
 
-ffff433c:	d10043ff 	sub	sp, sp, #0x10
-ffff4340:	a9007bfd 	stp	x29, x30, [sp]
-ffff4344:	910003fd 	mov	x29, sp
-ffff4348:	52800300 	mov	w0, #0x18                  	// #24
-ffff434c:	97fff1b6 	bl	0xffff0a24
+ffff433c:	d10043ff 	sub	sp, sp, #0x10		; 16 bytes on stack
+ffff4340:	a9007bfd 	stp	x29, x30, [sp]		; save 2 registers
+ffff4344:	910003fd 	mov	x29, sp			; get sp
+ffff4348:	52800300 	mov	w0, #0x18		; w0 = 24
+ffff434c:	97fff1b6 	bl	0xffff0a24		; write 24 to SRAM[0]
 ffff4350:	97fff1dc 	bl	0xffff0ac0
 ffff4354:	90ffc660 	adrp	x0, 0xff8c0000
-ffff4358:	b9000c1f 	str	wzr, [x0, #12]
+ffff4358:	b9000c1f 	str	wzr, [x0, #12]		; SRAM[3] = 0
 ffff435c:	97fff02b 	bl	0xffff0408
 ffff4360:	97fff207 	bl	0xffff0b7c
 ffff4364:	90ffc660 	adrp	x0, 0xff8c0000
-ffff4368:	b900101f 	str	wzr, [x0, #16]
+ffff4368:	b900101f 	str	wzr, [x0, #16]		; SRAM[4] = 0
 ffff436c:	97fff900 	bl	0xffff276c
 ffff4370:	97fffe75 	bl	0xffff3d44
 ffff4374:	14000000 	b	0xffff4374		; spin
@@ -5029,6 +5074,8 @@ ffff4b80:	14000000 	b	0xffff4b80
 ffff4b84:	5253 414b	"RSAK"
 
 ; data below here?
+; this looks like a block of 64 bit constants.
+
 ffff4b88:	ffff0d40 	.inst	0xffff0d40 ; undefined
 ffff4b8c:	00000000 	udf	#0
 ffff4b90:	ffff1184 	.inst	0xffff1184 ; undefined
@@ -5215,6 +5262,9 @@ ffff4e60:	fca60df6 	.inst	0xfca60df6 ; undefined
 ffff4e64:	00000000 	udf	#0
 
 ffff4e68:	524b 3333 5253 414b           "RK33RSAK"
+
+; A big block of 32 bit constants follow.
+; These are typically used by adrp instructions in the code above.
 
 ffff4e70:	ff790004 	.inst	0xff790004 ; undefined
 ffff4e74:	ff33c000 	.inst	0xff33c000 ; undefined
