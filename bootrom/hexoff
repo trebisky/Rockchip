@@ -1,0 +1,56 @@
+#! /usr/bin/python3
+
+# hexoff
+#  Tom Trebisky  1-22-2022
+#
+# Change base 10 offsets in certain instructions to hex
+
+infile = "bootrom.txt"
+
+def process ( line ) :
+    ll = line.split('[')
+    lll = ll[1].split('#')
+    lllx = lll[1].split(']')
+    val = int ( lllx[0] )
+    if val > 32 :
+        off = hex ( val )
+    else :
+        off = str ( val )
+    new = ll[0] + '[' + lll[0] + '#' + off + ']' + lllx[1]
+    #print ( new )
+    #print ( line )
+    return new
+
+def scan ( line ) :
+    if line.startswith(";") :
+        return line
+    # Python is happy either way.
+    #if not ", [" in line :
+    if ", [" not in line :
+        return line
+
+    # Every line that gets to here will end
+    # with some expression in []
+    ll = line.split('[')
+    if len(ll) != 2 :
+        print ( "Trouble 1" )
+        exit ()
+
+    if ", #" not in ll[1] :
+        return line
+    if "]," in ll[1] :
+        return line
+    if "sp," in ll[1] :
+        return line
+    lll = ll[1].split('#')
+    if len(lll) != 2 :
+        print ( "Trouble 2" )
+        exit ()
+
+    return process ( line )
+
+with open ( infile ) as f:
+    for line in f:
+        fix = scan ( line.rstrip() )
+        print ( fix )
+

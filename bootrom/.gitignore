@@ -3,3 +3,5 @@
 *.elf
 arm_wrap
 dump8
+*.bak1
+*.bak*
