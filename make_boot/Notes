@@ -1,0 +1,42 @@
+I decided to take a look at uboot.img
+
+The file is 4194304 bytes in size (4M)
+This is 8192 sectors of 512 bytes
+
+It turns out (surprisingly) that this is
+four identical 1M pieces back to back!
+
+I began suspicious when searching for the
+string "bootcmd" when contemplating doing
+some patching of the environment settings.
+
+Each 1M piece is 1048576 bytes
+
+The U-boot image I built from mainline sources
+is 712392 bytes in size.  If we padded it to
+1M and appended 4 copies, I wonder what would
+happen?  It doesn't work.
+
+I do the patch on the working image,
+but now it won't load it.  Some kind of checksum error.
+I bet I need to rebuild the header.
+
+Load uboot, ReadLba = 2000
+hdr 0000000003380880 + 0x0:0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+
+Load OK, addr=0x200000, size=0xc7ec8
+Code check error -1
+Load uboot, ReadLba = 2400
+hdr 0000000003380880 + 0x0:0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+
+tag:LOADER error,addr:0x4400
+hdr 0000000003380880 + 0x0:0xa0,0xd4,0
+
+We need to rerun this command:
+
+./tools/mkimage -f auto -A arm -T firmware -C none -O u-boot -a 0x00200000 -e 0x00200000 -p 0x0 -n "U-Boot 2022.01""-00450-g25711b07ca-dirty for evb_rk3399 board" -E  -b arch/arm/dts/rk3399-orangepi.dtb  -d u-boot-nodtb.bin u-boot.img
+
+BUT, not quite.  I need to rebuild the header for the debian uboot, not the one in
+the U-boot build area.  What would be interesting would be to dump the header for
+the debian uboot and go from there.
+
