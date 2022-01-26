@@ -139,6 +139,17 @@
 ;   This requires a previous "cmp" instruction or some such to set the condition
 ;   Here is an example:
 ;       csel    x20, x1, x0, eq
+; cset
+;  This sets a register to 1 if a condition is true, else it sets 0
+;  this will need to follow a cmp or some other instruction that sets
+;  condition codes.  I see it used in 2 places in this code as follows.
+;  The following test asks if register w19 is non-zero
+;  The following "and" seems like belt and suspenders
+;  It seems to me we could just specify x0 in the cset instruction
+;
+;	cmp	w19, #0x0
+;	cset	w0, ne
+;	and	x0, x0, #0x1
 
 ; ==========================================================================
 ; ==========================================================================
@@ -858,13 +869,18 @@ ffff0a08:	b9000020 	str	w0, [x1]
 ffff0a0c:	52a10000 	mov	w0, #0x8000000             	// #134217728
 ffff0a10:	b9000040 	str	w0, [x2]
 ffff0a14:	d65f03c0 	ret
+
+; subroutine - read first 4 bytes of SRAM (SRAM[0])
+; this is the posted CPU clock speed in Mhz
+
 ffff0a18:	90ffc680 	adrp	x0, 0xff8c0000
 ffff0a1c:	b9400000 	ldr	w0, [x0]
 ffff0a20:	d65f03c0 	ret
 
 ; subroutine - write first 4 bytes of SRAM (SRAM[0])
 ; only called in 2 places.
-; one writes the value 24, the other 400
+; one writes the value 24, the other 400 or 200
+; this is the CPU clock speed in Mhz
 
 ffff0a24:	90ffc681 	adrp	x1, 0xff8c0000
 ffff0a28:	b9000020 	str	w0, [x1]		; SRAM[0] = arg
@@ -872,15 +888,16 @@ ffff0a2c:	d65f03c0 	ret
 
 ; Many calls to this routine.
 ; I will call it "xxdelay()"
+;
 ; it is commonly called with xxdelay(1)
 ; but values of 10, 100, 500, 1000, 2000 are used.
 ;
 ; In essence it is some kind of variable delay loop
 ; that depends on the argument in w0 as well as
-; the value stored in SRAM[0]
+; the value stored in SRAM[0] (the cpu speed in Mhz)
 ;
-; As near as I can tell, only 2 values are ever stored into SRAM[0]
-; either 24 or 400
+; As near as I can tell, only 3 values are ever stored into SRAM[0]
+; either 24 or 200 or 400
 ; so the first branch below is used when SRAM[0] = 24 and xxdelay(1)
 ;  is the call, i.e. for a very short delay.
 ;
@@ -897,10 +914,20 @@ ffff0a3c:	90ffc681 	adrp	x1, 0xff8c0000		; SRAM
 ffff0a40:	b9400021 	ldr	w1, [x1]		; read SRAM[0]
 ffff0a44:	1b007c20 	mul	w0, w1, w0
 
-; Here we have calculated w0 = arg*SRAM[0] and will compare that to 0x18 (24)
-; if it matches, w0 = (0x1fff + w0 * 0x75) << 13
-; otherwise ---  w0 = (0x7fff + w0 * 0xb9) << 15
+; Here we have calculated w0 = arg*mhz
+; We compare the cpu mhz to 0x18 (24)
+; if it matches, w0 = (0x1fff + w0 * 0x75) >> 13
+; otherwise ---  w0 = (0x7fff + w0 * 0xb9) >> 15
 ; if this result is non-zero, we use it to delay
+;
+; Just out of curiosity, what happens when this is called with xxdelay(1)
+; and the cpu speed is 24?  We calculate 0x1fff + 24 * 117 = 10999
+; We shift this right 13 bits to get 1
+; This goes to a simple delay that will execute 2 instructions
+; per count.  This seems like pretty short delay.
+; What if the cpu speed is 400 and we ask for a delay of 10
+; calculate 32767 + 4000 * 185 = 772767
+; shift this by 2 to get 23, still a very short delay
 
 ffff0a48:	7100603f 	cmp	w1, #0x18
 ffff0a4c:	540000c1 	b.ne	0xffff0a64
@@ -952,6 +979,7 @@ ffff0ad0:	90000020 	adrp	x0, 0xffff4000
 ffff0ad4:	b94f4400 	ldr	w0, [x0, #0xf44]	; ffff4f44: ff76008c
 ffff0ad8:	b9000001 	str	w1, [x0]
 
+; This register controls the A53 cluster core clocks
 ffff0adc:	90000020 	adrp	x0, 0xffff4000
 ffff0ae0:	b94f4800 	ldr	w0, [x0, #0xf48]	; ffff4f48: ff760100
 ffff0ae4:	52a3fbe1 	mov	w1, #0x1fdf0000
@@ -999,120 +1027,315 @@ ffff0b6c:	b9000062 	str	w2, [x3]
 ffff0b70:	52a003e0 	mov	w0, #0x1f0000
 ffff0b74:	b9000080 	str	w0, [x4]
 ffff0b78:	d65f03c0 	ret
+ 
+; =======================================================
+; subroutine, called from 2 places
 
 ffff0b7c:	d10083ff 	sub	sp, sp, #0x20
 ffff0b80:	a9017bfd 	stp	x29, x30, [sp, #16]
 ffff0b84:	910043fd 	add	x29, sp, #0x10
 ffff0b88:	a90053f3 	stp	x19, x20, [sp]
-ffff0b8c:	97ffffa3 	bl	0xffff0a18
-ffff0b90:	71031c1f 	cmp	w0, #0xc7
-ffff0b94:	54000ce8 	b.hi	0xffff0d30  // b.pmore
+
+ffff0b8c:	97ffffa3 	bl	0xffff0a18		; get cpu clock speed
+ffff0b90:	71031c1f 	cmp	w0, #199
+ffff0b94:	54000ce8 	b.hi	0xffff0d30
+
+; set the CRU_LPLL_CON3 register to 0x10001
+; as always the upper 16 bits are a mask,
+; so we are changing one bit only (the lowest)
+; which is (of all things) global power down.
+; presumably this powers down the PLL, not the entire SoC
+; NOTE that x19 holds a pointer to this register for
+;   the end of the routine
 ffff0b98:	90000020 	adrp	x0, 0xffff4000
-ffff0b9c:	b94f7c13 	ldr	w19, [x0, #0xf7c]
-ffff0ba0:	320083e0 	mov	w0, #0x10001               	// #65537
+ffff0b9c:	b94f7c13 	ldr	w19, [x0, #0xf7c]	; ffff4f7c: ff76000c
+ffff0ba0:	320083e0 	mov	w0, #0x10001
 ffff0ba4:	b9000260 	str	w0, [x19]
-ffff0ba8:	320d83e1 	mov	w1, #0x80008               	// #524296
+
+; Once it is powered down, set another bit
+; this is PLL saturation enable, putting it into power down.
+ffff0ba8:	320d83e1 	mov	w1, #0x80008
 ffff0bac:	b9000261 	str	w1, [x19]
+
+; Now set the feedback divide value in CRU_LPLL_CON0
+; we set the value to 0xc8 (reset value is 0x96)
+; 0xc8 = 200
+
 ffff0bb0:	90000022 	adrp	x2, 0xffff4000
-ffff0bb4:	b94f8042 	ldr	w2, [x2, #0xf80]
-ffff0bb8:	d2bfeec3 	mov	x3, #0xff760000            	// #4285923328
+ffff0bb4:	b94f8042 	ldr	w2, [x2, #0xf80]	; ffff4f80: 0fff00c8
+ffff0bb8:	d2bfeec3 	mov	x3, #0xff760000
 ffff0bbc:	b9000062 	str	w2, [x3]
+
+; Now the mask is 773f and the value is 1403
+; This sets the CRU_LPLL_CON1 register (trm, page 72)
+;  postdiv2 = 1
+;  postdiv1 = 4
+;  refdiv = 3
+
 ffff0bc0:	90000022 	adrp	x2, 0xffff4000
-ffff0bc4:	b94f8442 	ldr	w2, [x2, #0xf84]
+ffff0bc4:	b94f8442 	ldr	w2, [x2, #0xf84]	; ffff4f84: 773f1403
 ffff0bc8:	90000023 	adrp	x3, 0xffff4000
-ffff0bcc:	b94f8863 	ldr	w3, [x3, #0xf88]
+ffff0bcc:	b94f8863 	ldr	w3, [x3, #0xf88]	; ffff4f88: ff760004
 ffff0bd0:	b9000062 	str	w2, [x3]
+
+; x20 gets a pointer to the CRU_GPLL_CON3 register (trm, p 86) 
+; NOTE that x20 retains a pointer to this register for
+;   the end of the routine.
+; Also note that we write to it the same sequence of values
+;  used above for CUR_LPLL_CON3 register
+; First we write 0x10001, which sets the global power down
+; Then we write 0x80008, which powers down the saturation thing.
+
 ffff0bd4:	90000022 	adrp	x2, 0xffff4000
-ffff0bd8:	b94f8c54 	ldr	w20, [x2, #0xf8c]
+ffff0bd8:	b94f8c54 	ldr	w20, [x2, #0xf8c]	; ffff4f8c: ff76008c
+
 ffff0bdc:	90000022 	adrp	x2, 0xffff4000
-ffff0be0:	b94f9042 	ldr	w2, [x2, #0xf90]
+ffff0be0:	b94f9042 	ldr	w2, [x2, #0xf90]	; ffff4f90: 0fff00c0
 ffff0be4:	90000023 	adrp	x3, 0xffff4000
-ffff0be8:	b94f9463 	ldr	w3, [x3, #0xf94]
+ffff0be8:	b94f9463 	ldr	w3, [x3, #0xf94]	; ffff4f94: ff760080
 ffff0bec:	90000024 	adrp	x4, 0xffff4000
-ffff0bf0:	b94f9884 	ldr	w4, [x4, #0xf98]
+ffff0bf0:	b94f9884 	ldr	w4, [x4, #0xf98]	; ffff4f98: 773f2302
 ffff0bf4:	90000025 	adrp	x5, 0xffff4000
-ffff0bf8:	b94f9ca5 	ldr	w5, [x5, #0xf9c]
+ffff0bf8:	b94f9ca5 	ldr	w5, [x5, #0xf9c]	j ffff4f9c: ff760084
 ffff0bfc:	b9000280 	str	w0, [x20]
 ffff0c00:	b9000281 	str	w1, [x20]
+
+; write 0fff_00c0 to CRU_GPLL_CON0 (offset 0x80, trm page 84)
+; this has one 12 bit field "fbdiv",
+; which we set to 0xc0 (reset value is 0xc6)
+; write 773f_2302 to CRU_GPLL_CON1 (offset 0x84, trm page 85)
+; this has 3 divisors, we set:
+; postdiv2 = 2
+; postdiv1 = 3
+; refdev = 2
+
 ffff0c04:	b9000062 	str	w2, [x3]
 ffff0c08:	b90000a4 	str	w4, [x5]
-ffff0c0c:	52800140 	mov	w0, #0xa                   	// #10
+
+ffff0c0c:	52800140 	mov	w0, #0xa
 ffff0c10:	97ffff88 	bl	0xffff0a30		; xxdelay(10)
+
+; clear the global power down bits
 ffff0c14:	52a00020 	mov	w0, #0x10000               	// #65536
 ffff0c18:	b9000260 	str	w0, [x19]
 ffff0c1c:	b9000280 	str	w0, [x20]
-ffff0c20:	52807d00 	mov	w0, #0x3e8                 	// #1000
+
+ffff0c20:	52807d00 	mov	w0, #0x3e8              ; w0 = 1000
 ffff0c24:	97ffff83 	bl	0xffff0a30		; xxdelay(1000)
+
+; now read the "global reset status" register
+; CRU_GLB_RST_ST (trm, page 191(
+; mask out the low (and only) 5 bits.
+; if they are zero set CPU at 400
+; otherwise fall through and set 200
 ffff0c28:	90000020 	adrp	x0, 0xffff4000
-ffff0c2c:	b94fa000 	ldr	w0, [x0, #0xfa0]
+ffff0c2c:	b94fa000 	ldr	w0, [x0, #0xfa0]	; ffff4fa0: ff760514
 ffff0c30:	b9400000 	ldr	w0, [x0]
 ffff0c34:	12001400 	and	w0, w0, #0x3f
 ffff0c38:	34000100 	cbz	w0, 0xffff0c58
+
+; Write to CRU_CLKSEL_CON0 (trm, p. 94)
+; We write 1fdf_0101
+; the mask is 0001_111_1101_1111
+; a 5 bit field = 1 -- aclkm_core_l_div (clk=src/(div+1))
+; a 2 bit field = 0 -- clk_core_l_pll_sel = LPLL
+; a 5 bit field = 1 -- clk_core_l_div
+; setting 1 in the last field gets a divide by 2.
+;
+; a note here.  the "l" in these is matched by a "b"
+; in another register.  So I believe this controls the clock
+; for all 4 "little" A53 cores.  The "b" control is for
+; the "big" A72 cores.
+; This would be handled by the CON2 register at offset 0x108
+
 ffff0c3c:	90000020 	adrp	x0, 0xffff4000
-ffff0c40:	b94fa400 	ldr	w0, [x0, #0xfa4]
+ffff0c40:	b94fa400 	ldr	w0, [x0, #0xfa4]	; ffff4fa4: 1fdf0101
 ffff0c44:	90000021 	adrp	x1, 0xffff4000
-ffff0c48:	b94fa821 	ldr	w1, [x1, #0xfa8]
+ffff0c48:	b94fa821 	ldr	w1, [x1, #0xfa8]	; ffff4fa8: ff760100
 ffff0c4c:	b9000020 	str	w0, [x1]
-ffff0c50:	52801900 	mov	w0, #0xc8                  	// #200
+ffff0c50:	52801900 	mov	w0, #0xc8               ; declare CPU at 200 Mhz
 ffff0c54:	14000007 	b	0xffff0c70
+
+; Write to CRU_CLKSEL_CON0 (trm, p. 94)
+; the same mask as above, the only difference is the last field
+; where we set the div to 0 (yielding a divide by 1).
 ffff0c58:	90000020 	adrp	x0, 0xffff4000
-ffff0c5c:	b94fac00 	ldr	w0, [x0, #0xfac]
+ffff0c5c:	b94fac00 	ldr	w0, [x0, #0xfac]	; ffff4fac: 1fdf0100
 ffff0c60:	90000021 	adrp	x1, 0xffff4000
-ffff0c64:	b94fa821 	ldr	w1, [x1, #0xfa8]
+ffff0c64:	b94fa821 	ldr	w1, [x1, #0xfa8]	; ffff4fa8: ff760100
 ffff0c68:	b9000020 	str	w0, [x1]
-ffff0c6c:	52803200 	mov	w0, #0x190                 	; w0 = 400
+ffff0c6c:	52803200 	mov	w0, #0x190              ; declare CPU at 400 Mhz
+
+; 0xff76---- addresses are in the CRU
+; note that there is a PMUCRU with a different base.
+;
+; The pmu registers are 32 bit.
+;  the upper 16 bits are an "enable" mask indicating
+;  which bits in the lower 16 ought to be changed.
+;
+; here is a commentary on the following:
+;  ff760104 = 1f1f0303
+;    this is CRU_CLKSEL_CON1 (trm, p 95)
+;    we have two 5 bit fields, both getting set to 3
+;    these set clk = clk_src / (con+1)
+;    the upper field is pclk_dbg_l
+;    the lower field is atclk_core_l
+;
+;  ff760110 = 00df0043
+;    this is CRU_CLKSEL_CON4 (trm, p. 96)
+;    we have a 2 bit field and a 5 bit field
+;    the mask is 1101_1111
+;    The upper 2 is clk_cs_pll_select
+;     we set the bits to 01, selecting GPLL
+;    The lower 5 bits go to 3
+;     this is clk_cs_div
+;
+;  ff760114 = 9fdf8341
+;    this is CRU_CLKSEL_CON5 (trm, p. 96)
+;    the mask is 1001_1111_1101_1111
+;    the top bit is clk_cci_trace_pll_sel, 1 selects GPLL
+;    the next 5 bits are clk_cci_trace_div = 3
+;      where clk = clk_src / (con+1)
+;    then 2 bits are aclk_cci_pll_sel = 2 (GPLL)
+;    The bottom 5 bits are aclk_cci_div = 1
+;      where clk = clk_src / (con+1)
+;
+;  ff760130 = 739f0100
+;    this is CRU_CLKSEL_CON12 (trm, p 100)
+;    the mask is 0111_0011_1001_1111
+;    the top 2 bits are not fully unmasked (typo/bug?)
+;    they are aclk_center_pll_sel = 0 (CPLL)
+;    we then have a 5 bit field (also oddly masked), set to 1 (GPLL) maybe
+;    this is aclk_center_div
+;    then we should have 2 more bits, oddly masked, setting 0 (CPLL) maybe
+;    this is clk_rga_core_pll_sel
+;    finally the bottom 5 bits, properly masked set 0
+;    this is clk_rga_core_div
+;
+; ff760138 = 739f3181
+;    this is CRU_CLKSEL_CON14 (trm, p 102)
+;    the mask is 0111_0011_1001_1111 (again)
+;    the top bit (neither selected or set) is clk_usbpll_480m_sel
+;    the next 3 are a divisor  pclk_periphp_div = 3
+;    skip 2 bits
+;    the next 2 are a divisor  hclk_perihp_div = 1
+;    a single bit (set to 1) is aclk_perihp_pll_sel = CPLL
+;    the next 2 bits are unmodified (clk_usbphy_480m_ch_sel)
+;    the last 5 bits are a divisor aclk_perihp_div = 1
+;
+; ff76015c = 739f3181
+;    - oddly enough this gets set to the same value as the previous register
+;    this is CRU_CLKSEL_CON23 (trm, p 106)
+;    the mask is 0111_0011_1001_1111 (again)
+;    we skip bit 15
+;    then a 3 bit field set to 3 -- pclk_perilp0_div
+;    we skip 2 bits
+;    then a 2 bit field set to 1 -- hclk_perilp0_div
+;    then a 1 bit field set to 1 -- aclk_perilp0_pll_sel = CPLL
+;    we skip 2 bits
+;    finally a 5 bit field set to 1 -- aclk_perilp0_div
+;
+; ff760164 = 079f0183
+;    this is CRU_CLKSEL_CON25 (trm, p 108)
+;    the mask is 1111_1111_0111_0110
+;    we skip the top 5 bits
+;    the next 3 set to 1 -- pclk_perilp1_div
+;    a 1 bit field, not selected by the mask
+;    skip 2 bits
+;    a 5 bit field, oddly masked (bug?) hclk_perilp1_div
+;
+; ff7601e0 = 001f8300
+;    this is CRU_CLKSEL_CON56 (trm, p 122)
+;    the mask is 0000_0000_0001_1111
+;    the top 8 bits are unmolested -- aclk_gic_pll and div
+;    the next 2 are unmolested -- clk_cif_pll_sel
+;    a single bit = 0 -- clk_cif_clk_sel = clk_cif_src
+;    the low 5 bits = 0 are clk_cif_div
+;    (this looks odd and perhaps buggy to me)
+;
+; ff7601e4 = 001f0005
+;    this is CRU_CLKSEL_CON57 (trm, p 123)
+;    the mask is 0000_0000_0001_1111
+;    we leave clkout_24m_div alone
+;    we set via the low 5 bits = 5 -- pclk_alive_div
+
+
 ffff0c70:	90000021 	adrp	x1, 0xffff4000
-ffff0c74:	b94fb021 	ldr	w1, [x1, #0xfb0]
+ffff0c74:	b94fb021 	ldr	w1, [x1, #0xfb0]	; ffff4fb0: 1f1f0303
 ffff0c78:	90000022 	adrp	x2, 0xffff4000
-ffff0c7c:	b94fb442 	ldr	w2, [x2, #0xfb4]
+ffff0c7c:	b94fb442 	ldr	w2, [x2, #0xfb4]	; ffff4fb4: ff760104
 ffff0c80:	b9000041 	str	w1, [x2]
 ffff0c84:	90000021 	adrp	x1, 0xffff4000
-ffff0c88:	b94fb821 	ldr	w1, [x1, #0xfb8]
+ffff0c88:	b94fb821 	ldr	w1, [x1, #0xfb8]	; ffff4fb8: 00df0043
 ffff0c8c:	90000022 	adrp	x2, 0xffff4000
-ffff0c90:	b94fbc42 	ldr	w2, [x2, #0xfbc]
+ffff0c90:	b94fbc42 	ldr	w2, [x2, #0xfbc]	; ffff4fbc: ff760110
 ffff0c94:	b9000041 	str	w1, [x2]
 ffff0c98:	90000021 	adrp	x1, 0xffff4000
-ffff0c9c:	b94fc021 	ldr	w1, [x1, #0xfc0]
+ffff0c9c:	b94fc021 	ldr	w1, [x1, #0xfc0]	; ffff4fc0: 9fdf8341
 ffff0ca0:	90000022 	adrp	x2, 0xffff4000
-ffff0ca4:	b94fc442 	ldr	w2, [x2, #0xfc4]
+ffff0ca4:	b94fc442 	ldr	w2, [x2, #0xfc4]	; ffff4fc4: ff760114
 ffff0ca8:	b9000041 	str	w1, [x2]
 ffff0cac:	90000021 	adrp	x1, 0xffff4000
-ffff0cb0:	b94fc821 	ldr	w1, [x1, #0xfc8]
+ffff0cb0:	b94fc821 	ldr	w1, [x1, #0xfc8]	; ffff4fc8: 739f0100
 ffff0cb4:	90000022 	adrp	x2, 0xffff4000
-ffff0cb8:	b94fcc42 	ldr	w2, [x2, #0xfcc]
+ffff0cb8:	b94fcc42 	ldr	w2, [x2, #0xfcc]	; ffff4fcc: ff760130
 ffff0cbc:	b9000041 	str	w1, [x2]
 ffff0cc0:	90000021 	adrp	x1, 0xffff4000
-ffff0cc4:	b94fd021 	ldr	w1, [x1, #0xfd0]
+ffff0cc4:	b94fd021 	ldr	w1, [x1, #0xfd0]	; ffff4fd0: 739f3181
 ffff0cc8:	90000022 	adrp	x2, 0xffff4000
-ffff0ccc:	b94fd442 	ldr	w2, [x2, #0xfd4]
+ffff0ccc:	b94fd442 	ldr	w2, [x2, #0xfd4]	; ffff4fd4: ff760138
 ffff0cd0:	b9000041 	str	w1, [x2]
+
 ffff0cd4:	90000022 	adrp	x2, 0xffff4000
-ffff0cd8:	b94fd842 	ldr	w2, [x2, #0xfd8]
+ffff0cd8:	b94fd842 	ldr	w2, [x2, #0xfd8]	; ffff4fd8: ff76015c
 ffff0cdc:	b9000041 	str	w1, [x2]
+
 ffff0ce0:	90000021 	adrp	x1, 0xffff4000
-ffff0ce4:	b94fdc21 	ldr	w1, [x1, #0xfdc]
+ffff0ce4:	b94fdc21 	ldr	w1, [x1, #0xfdc]	; ffff4fdc: 079f0183
 ffff0ce8:	90000022 	adrp	x2, 0xffff4000
-ffff0cec:	b94fe042 	ldr	w2, [x2, #0xfe0]
+ffff0cec:	b94fe042 	ldr	w2, [x2, #0xfe0]	; ffff4fe0: ff760164
 ffff0cf0:	b9000041 	str	w1, [x2]
+
 ffff0cf4:	90000021 	adrp	x1, 0xffff4000
-ffff0cf8:	b94fe421 	ldr	w1, [x1, #0xfe4]
+ffff0cf8:	b94fe421 	ldr	w1, [x1, #0xfe4]	; ffff4fe4: 001f8300
 ffff0cfc:	90000022 	adrp	x2, 0xffff4000
-ffff0d00:	b94fe842 	ldr	w2, [x2, #0xfe8]
+ffff0d00:	b94fe842 	ldr	w2, [x2, #0xfe8]	; ffff4fe8: ff7601e0
 ffff0d04:	90000023 	adrp	x3, 0xffff4000
-ffff0d08:	b94fec63 	ldr	w3, [x3, #0xfec]
+ffff0d08:	b94fec63 	ldr	w3, [x3, #0xfec]	; ffff4fec: 001f0005
 ffff0d0c:	90000024 	adrp	x4, 0xffff4000
-ffff0d10:	b94ff084 	ldr	w4, [x4, #0xff0]
+ffff0d10:	b94ff084 	ldr	w4, [x4, #0xff0]	; ffff4ff0: ff7601e4
 ffff0d14:	90000025 	adrp	x5, 0xffff4000
-ffff0d18:	b94ff4a5 	ldr	w5, [x5, #0xff4]
+ffff0d18:	b94ff4a5 	ldr	w5, [x5, #0xff4]	; ffff4ff4: 03000100
 ffff0d1c:	b9000041 	str	w1, [x2]
 ffff0d20:	b9000083 	str	w3, [x4]
+
+; Notes on the following writes.  These are to 
+;  the CRU_LPLL_CON3 register and
+;  the CRU_GPLL_CON3 register
+; the value written to both is 0x03000100
+; this enables a 2 bit field (bits 9 and 8)
+;  which is PLL work mode, setting it to 1
+;        (Normal mode, clock from PLL output)
+; Note that nothing has been done to clear the power down bits !?
+
 ffff0d24:	b9000265 	str	w5, [x19]
 ffff0d28:	b9000285 	str	w5, [x20]
-ffff0d2c:	97ffff3e 	bl	0xffff0a24		; SRAM[0] = 400
+
+; call this routine to post the CPU speed we just set
+ffff0d2c:	97ffff3e 	bl	0xffff0a24		; SRAM[0] = 400 or 200
+
+; My theory on the above is that 400 (or 200) is the processor speed in Mhz.
+; It starts up 24 Mhz, but the above bumps it to 400,
+; then posts the running speed in SRAM[0]
+
+; branch to here if cpu clock > 199
+
 ffff0d30:	a94053f3 	ldp	x19, x20, [sp]
 ffff0d34:	a9417bfd 	ldp	x29, x30, [sp, #16]
 ffff0d38:	910083ff 	add	sp, sp, #0x20
 ffff0d3c:	d65f03c0 	ret
+
+; subroutine, referenced only in the 32 bit constants
 ffff0d40:	d100c3ff 	sub	sp, sp, #0x30
 ffff0d44:	a9027bfd 	stp	x29, x30, [sp, #32]
 ffff0d48:	910083fd 	add	x29, sp, #0x20
@@ -1176,6 +1399,8 @@ ffff0e2c:	a94157f4 	ldp	x20, x21, [sp, #16]
 ffff0e30:	a9427bfd 	ldp	x29, x30, [sp, #32]
 ffff0e34:	9100c3ff 	add	sp, sp, #0x30
 ffff0e38:	d65f03c0 	ret
+
+; another subroutine, referenced only in the 32 bit constants
 ffff0e3c:	d10103ff 	sub	sp, sp, #0x40
 ffff0e40:	a9037bfd 	stp	x29, x30, [sp, #48]
 ffff0e44:	9100c3fd 	add	x29, sp, #0x30
@@ -1224,6 +1449,8 @@ ffff0eec:	a94257f4 	ldp	x20, x21, [sp, #32]
 ffff0ef0:	a9437bfd 	ldp	x29, x30, [sp, #48]
 ffff0ef4:	910103ff 	add	sp, sp, #0x40
 ffff0ef8:	d65f03c0 	ret
+
+; subroutine, several references
 ffff0efc:	d10183ff 	sub	sp, sp, #0x60
 ffff0f00:	a9057bfd 	stp	x29, x30, [sp, #80]
 ffff0f04:	910143fd 	add	x29, sp, #0x50
@@ -1297,6 +1524,7 @@ ffff1010:	a94473fb 	ldp	x27, x28, [sp, #64]
 ffff1014:	a9457bfd 	ldp	x29, x30, [sp, #80]
 ffff1018:	910183ff 	add	sp, sp, #0x60
 ffff101c:	d65f03c0 	ret
+
 ffff1020:	d10203ff 	sub	sp, sp, #0x80
 ffff1024:	a9077bfd 	stp	x29, x30, [sp, #112]
 ffff1028:	9101c3fd 	add	x29, sp, #0x70
@@ -1728,13 +1956,13 @@ ffff16bc:	52842d41 	mov	w1, #0x216a                	// #8554
 ffff16c0:	aa1303e0 	mov	x0, x19
 ffff16c4:	aa1f03e2 	mov	x2, xzr
 ffff16c8:	aa1f03e3 	mov	x3, xzr
-ffff16cc:	94000017 	bl	0xffff1728
+ffff16cc:	94000017 	bl	0xffff1728		; below ..
 ffff16d0:	35000220 	cbnz	w0, 0xffff1714
 ffff16d4:	528428c1 	mov	w1, #0x2146                	// #8518
 ffff16d8:	52800042 	mov	w2, #0x2                   	// #2
 ffff16dc:	aa1303e0 	mov	x0, x19
 ffff16e0:	aa1f03e3 	mov	x3, xzr
-ffff16e4:	94000011 	bl	0xffff1728
+ffff16e4:	94000011 	bl	0xffff1728		; below ..
 ffff16e8:	35000100 	cbnz	w0, 0xffff1708
 ffff16ec:	7100027f 	cmp	w19, #0x0
 ffff16f0:	d2bfc660 	mov	x0, #0xfe330000		; eMMC base
@@ -1752,24 +1980,27 @@ ffff171c:	a9437bfd 	ldp	x29, x30, [sp, #48]
 ffff1720:	910103ff 	add	sp, sp, #0x40
 ffff1724:	d65f03c0 	ret
 
+; subroutine, 3 calls (above)
+
 ffff1728:	d10103ff 	sub	sp, sp, #0x40
 ffff172c:	a9037bfd 	stp	x29, x30, [sp, #48]
 ffff1730:	9100c3fd 	add	x29, sp, #0x30
 ffff1734:	a9025bf5 	stp	x21, x22, [sp, #32]
 ffff1738:	a90153f3 	stp	x19, x20, [sp, #16]
-ffff173c:	f0ffc664 	adrp	x4, 0xff8c0000
-ffff1740:	7942f884 	ldrh	w4, [x4, #0x17c]
+
+ffff173c:	f0ffc664 	adrp	x4, 0xff8c0000		; SRAM
+ffff1740:	7942f884 	ldrh	w4, [x4, #0x17c]	; w4 = *(SRAM+0x17c)
 ffff1744:	aa0303f3 	mov	x19, x3
 ffff1748:	aa0203f4 	mov	x20, x2
 ffff174c:	aa0103f5 	mov	x21, x1
 ffff1750:	aa0003f6 	mov	x22, x0
-ffff1754:	b9000fff 	str	wzr, [sp, #12]
+ffff1754:	b9000fff 	str	wzr, [sp, #12]		; x = 0
 ffff1758:	53103c82 	lsl	w2, w4, #16
-ffff175c:	910033e3 	add	x3, sp, #0xc
-ffff1760:	52842ee1 	mov	w1, #0x2177                	// #8567
+ffff175c:	910033e3 	add	x3, sp, #0xc		; &x
+ffff1760:	52842ee1 	mov	w1, #0x2177
 ffff1764:	940000fe 	bl	0xffff1b5c
 ffff1768:	35000140 	cbnz	w0, 0xffff1790
-ffff176c:	394033e0 	ldrb	w0, [sp, #12]
+ffff176c:	394033e0 	ldrb	w0, [sp, #12]		; w0 = x
 ffff1770:	362800e0 	tbz	w0, #5, 0xffff178c
 ffff1774:	aa1603e0 	mov	x0, x22
 ffff1778:	aa1503e1 	mov	x1, x21
@@ -1777,22 +2008,28 @@ ffff177c:	aa1403e2 	mov	x2, x20
 ffff1780:	aa1303e3 	mov	x3, x19
 ffff1784:	940000f6 	bl	0xffff1b5c
 ffff1788:	14000002 	b	0xffff1790
-ffff178c:	2a1f03e0 	mov	w0, wzr
-ffff1790:	a94153f3 	ldp	x19, x20, [sp, #16]
+
+ffff178c:	2a1f03e0 	mov	w0, wzr			; return 0
+ffff1790:	a94153f3 	ldp	x19, x20, [sp, #16]	; return w0
 ffff1794:	a9425bf5 	ldp	x21, x22, [sp, #32]
 ffff1798:	a9437bfd 	ldp	x29, x30, [sp, #48]
 ffff179c:	910103ff 	add	sp, sp, #0x40
 ffff17a0:	d65f03c0 	ret
+
+; subroutine, referenced in 32 bit constants
+
 ffff17a4:	d10043ff 	sub	sp, sp, #0x10
 ffff17a8:	a9007bfd 	stp	x29, x30, [sp]
 ffff17ac:	910003fd 	mov	x29, sp
-ffff17b0:	aa1f03e0 	mov	x0, xzr
+
+ffff17b0:	aa1f03e0 	mov	x0, xzr			; x0 = 0
 ffff17b4:	940000ee 	bl	0xffff1b6c
-ffff17b8:	aa1f03e0 	mov	x0, xzr
+ffff17b8:	aa1f03e0 	mov	x0, xzr			; x0 = 0
 ffff17bc:	940002c3 	bl	0xffff22c8
 ffff17c0:	7100001f 	cmp	w0, #0x0
-ffff17c4:	1a9f07e0 	cset	w0, ne  // ne = any
-ffff17c8:	92400000 	and	x0, x0, #0x1
+ffff17c4:	1a9f07e0 	cset	w0, ne			; any bits set ?
+ffff17c8:	92400000 	and	x0, x0, #0x1		; return 1 if so.
+
 ffff17cc:	a9407bfd 	ldp	x29, x30, [sp]
 ffff17d0:	910043ff 	add	sp, sp, #0x10
 ffff17d4:	d65f03c0 	ret
@@ -1867,7 +2104,19 @@ ffff18e0:	a9417bfd 	ldp	x29, x30, [sp, #16]
 ffff18e4:	910083ff 	add	sp, sp, #0x20
 ffff18e8:	d65f03c0 	ret
 
+; subroutine
 ; Do something with SD or eMMC
+; called in 3 places
+; arguments:
+;
+;  w0 is 0 for SD, 1 for MMC
+;  w1 (x20) is 0x2351 or 0x2352 or many other things
+;  w2 (x25)
+;  w3 (x19)
+;  w4 (x26)
+;  w5 (x23)
+;  w6 (x22)
+
 ffff18ec:	d10183ff 	sub	sp, sp, #0x60
 ffff18f0:	a9057bfd 	stp	x29, x30, [sp, #80]
 ffff18f4:	910143fd 	add	x29, sp, #0x50
@@ -1927,7 +2176,7 @@ ffff1990:	aa1503e0 	mov	x0, x21
 ffff1994:	97ffffb9 	bl	0xffff1878
 ffff1998:	35000ae0 	cbnz	w0, 0xffff1af4		; return
 ffff199c:	52807d00 	mov	w0, #0x3e8		; w0 = 1000
-ffff19a0:	b90007e0 	str	w0, [sp, #4]
+ffff19a0:	b90007e0 	str	w0, [sp, #4]		; x = 1000
 ffff19a4:	14000003 	b	0xffff19b0
 
 ; loop, but how do we get here ?
@@ -1936,7 +2185,7 @@ ffff19ac:	97fffc21 	bl	0xffff0a30		; xxdelay(1)
 ffff19b0:	b94046a0 	ldr	w0, [x21, #0x44]	; mmc_44
 ffff19b4:	371000c0 	tbnz	w0, #2, 0xffff19cc
 ffff19b8:	b94007e0 	ldr	w0, [sp, #4]
-ffff19bc:	51000401 	sub	w1, w0, #0x1
+ffff19bc:	51000401 	sub	w1, w0, #0x1		; x--
 ffff19c0:	b90007e1 	str	w1, [sp, #4]
 ffff19c4:	7100041f 	cmp	w0, #0x1
 ffff19c8:	54ffff0a 	b.ge	0xffff19a8
@@ -1955,7 +2204,7 @@ ffff19f4:	14000040 	b	0xffff1af4		; return 0x20
 
 ffff19f8:	12170280 	and	w0, w20, #0x200
 ffff19fc:	34000500 	cbz	w0, 0xffff1a9c
-ffff1a00:	b90007ff 	str	wzr, [sp, #4]
+ffff1a00:	b90007ff 	str	wzr, [sp, #4]		; x = 0
 ffff1a04:	53027ef8 	lsr	w24, w23, #2
 ffff1a08:	52945017 	mov	w23, #0xa280                	// #41600
 ffff1a0c:	34000498 	cbz	w24, 0xffff1a9c
@@ -1966,7 +2215,7 @@ ffff1a1c:	b9404aa0 	ldr	w0, [x21, #0x48]	; mmc_48
 ffff1a20:	371001a0 	tbnz	w0, #2, 0xffff1a54
 ffff1a24:	b9400360 	ldr	w0, [x27]
 ffff1a28:	b90002c0 	str	w0, [x22]
-ffff1a2c:	b90007ff 	str	wzr, [sp, #4]
+ffff1a2c:	b90007ff 	str	wzr, [sp, #4]		; x = 0
 ffff1a30:	b9404aa1 	ldr	w1, [x21, #0x48]
 ffff1a34:	2a1803e0 	mov	w0, w24
 ffff1a38:	910012d6 	add	x22, x22, #0x4
@@ -1978,7 +2227,7 @@ ffff1a4c:	7100041f 	cmp	w0, #0x1
 ffff1a50:	54000160 	b.eq	0xffff1a7c
 ffff1a54:	52800020 	mov	w0, #0x1
 ffff1a58:	97fffbf6 	bl	0xffff0a30		; xxdelay(1)
-ffff1a5c:	b94007e0 	ldr	w0, [sp, #4]
+ffff1a5c:	b94007e0 	ldr	w0, [sp, #4]		; w0 = x
 ffff1a60:	90000021 	adrp	x1, 0xffff5000
 ffff1a64:	b9406821 	ldr	w1, [x1, #0x68]
 ffff1a68:	11000402 	add	w2, w0, #0x1
@@ -2017,6 +2266,7 @@ ffff1ae8:	b4000073 	cbz	x19, 0xffff1af4		; return
 ffff1aec:	b94032a0 	ldr	w0, [x21, #0x30]
 ffff1af0:	b9000260 	str	w0, [x19]
 
+; We return here.  x24 becomes the return value
 ffff1af4:	aa1803e0 	mov	x0, x24
 ffff1af8:	f94007f3 	ldr	x19, [sp, #8]
 ffff1afc:	a94157f4 	ldp	x20, x21, [sp, #16]
@@ -2027,15 +2277,19 @@ ffff1b0c:	a9457bfd 	ldp	x29, x30, [sp, #80]
 ffff1b10:	910183ff 	add	sp, sp, #0x60
 ffff1b14:	d65f03c0 	ret
 
+; subroutine
 ; Called with x0 the base for SD or eMMC
+; called in 2 places
 ffff1b18:	d10043ff 	sub	sp, sp, #0x10
 ffff1b1c:	b9404801 	ldr	w1, [x0, #0x48]		; mmc_48
 ffff1b20:	371001a1 	tbnz	w1, #2, 0xffff1b54	; bail out
-ffff1b24:	b9400001 	ldr	w1, [x0]
+
+; Set this bit, then wait for it to clear, with timeout
+ffff1b24:	b9400001 	ldr	w1, [x0]		; mmc_0
 ffff1b28:	321f0021 	orr	w1, w1, #0x2
 ffff1b2c:	b9000001 	str	w1, [x0]		; mmc_0 |= 0x2
-ffff1b30:	52827101 	mov	w1, #0x1388
 
+ffff1b30:	52827101 	mov	w1, #0x1388
 ffff1b34:	b9000fe1 	str	w1, [sp, #12]		; x = 5000
 ffff1b38:	b9400001 	ldr	w1, [x0]		; mmc_0
 ffff1b3c:	360800c1 	tbz	w1, #1, 0xffff1b54	; test bit 1
@@ -2048,10 +2302,16 @@ ffff1b50:	54ffff4c 	b.gt	0xffff1b38		; loop
 ffff1b54:	910043ff 	add	sp, sp, #0x10
 ffff1b58:	d65f03c0 	ret
 
+; subroutine, many calls.
+; bounces to the routine above
+
 ffff1b5c:	aa1f03e4 	mov	x4, xzr
 ffff1b60:	aa1f03e5 	mov	x5, xzr
 ffff1b64:	aa1f03e6 	mov	x6, xzr
 ffff1b68:	17ffff61 	b	0xffff18ec
+
+; subroutine, only called from one place
+
 ffff1b6c:	d10083ff 	sub	sp, sp, #0x20
 ffff1b70:	a9017bfd 	stp	x29, x30, [sp, #16]
 ffff1b74:	910043fd 	add	x29, sp, #0x10
@@ -2524,6 +2784,9 @@ ffff22b8:	a94053f3 	ldp	x19, x20, [sp]
 ffff22bc:	a9417bfd 	ldp	x29, x30, [sp, #16]
 ffff22c0:	910083ff 	add	sp, sp, #0x20
 ffff22c4:	d65f03c0 	ret
+
+; subroutine, only called in one place
+
 ffff22c8:	d10083ff 	sub	sp, sp, #0x20
 ffff22cc:	a9017bfd 	stp	x29, x30, [sp, #16]
 ffff22d0:	910043fd 	add	x29, sp, #0x10
@@ -2569,6 +2832,7 @@ ffff236c:	a94053f3 	ldp	x19, x20, [sp]
 ffff2370:	a9417bfd 	ldp	x29, x30, [sp, #16]
 ffff2374:	910083ff 	add	sp, sp, #0x20
 ffff2378:	d65f03c0 	ret
+
 ffff237c:	d100c3ff 	sub	sp, sp, #0x30
 ffff2380:	a9027bfd 	stp	x29, x30, [sp, #32]
 ffff2384:	910083fd 	add	x29, sp, #0x20
@@ -2612,6 +2876,7 @@ ffff2418:	a94157f4 	ldp	x20, x21, [sp, #16]
 ffff241c:	a9427bfd 	ldp	x29, x30, [sp, #32]
 ffff2420:	9100c3ff 	add	sp, sp, #0x30
 ffff2424:	d65f03c0 	ret
+
 ffff2428:	d10083ff 	sub	sp, sp, #0x20
 ffff242c:	a9017bfd 	stp	x29, x30, [sp, #16]
 ffff2430:	910043fd 	add	x29, sp, #0x10
@@ -4626,8 +4891,10 @@ ffff433c:	d10043ff 	sub	sp, sp, #0x10		; 16 bytes on stack
 ffff4340:	a9007bfd 	stp	x29, x30, [sp]		; save 2 registers
 ffff4344:	910003fd 	mov	x29, sp			; get sp
 
+; post initial cpu clock speed of 24 Mhz
 ffff4348:	52800300 	mov	w0, #0x18		; w0 = 24
 ffff434c:	97fff1b6 	bl	0xffff0a24		; SRAM[0] = 24
+
 ffff4350:	97fff1dc 	bl	0xffff0ac0
 ffff4354:	90ffc660 	adrp	x0, 0xff8c0000
 ffff4358:	b9000c1f 	str	wzr, [x0, #12]		; SRAM[3] = 0
