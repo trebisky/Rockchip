@@ -34,6 +34,10 @@
 ; So, we can only hope that someone else has done that for us,
 ; and parked them someplace where we can get at them.
 
+; Interestingly, the bootrom does very little with processor registers
+;  via the mrs and msr instruction.  It never enables caches for example.
+; It messes with mpidr_el1, elr_el3 and vbar_el2 and that is it.
+
 ; =======================================================================
 
 ; Here are some base addresses of hardware items that arise
@@ -230,8 +234,54 @@
 ;  AL - always (unconditional branch) - any CC
 ;    (in this case, we just have "b"
 ;
-; These are used by b, cset, csel
-;  maybe others ?
+; Note that the notations of GE, LT in the above are completely useless
+; without some convention of what is being compared to what.
+; The way to think about it is as the result of a preceding "cmp"
+; where we compare "cmp A, B", in this case GE refers to A >= B
+;
+; Note that I never see vs or vc (in this code anyway)
+; The condition codes are used by b, cset, csel (others?).
+;
+; I always get annoyed at this whole condition code business.
+;  so I am going to go on at some length in the following.
+; There are endless opportunities for double think depending
+;  on what order the operands are compared and whether you
+;  are talking about signed or unsigned values.
+;
+; The way to get your mind around these is to realize that you
+;  really need to think about multi-instruction "idioms".
+; If you think about C programming, you never deal with condition codes,
+;  you just compare numbers, so what are the idioms for comparing numbers?
+; A conditional branch will almost invariably be preceeded by a
+;  cmp instruction like the following:
+
+;	ffff0fdc:	71000b9f 	cmp	w28, #0x2
+;	ffff0fe0:	54fffb83 	b.cc	0xffff0f50  // b.lo, b.ul, b.last
+
+; The above says to branch if w28 < 2  (if we have unsigned values)
+
+;	ffff0298:	6b3342df 	cmp	w22, w19, uxtw
+;	ffff029c:	54fffec3 	b.cc	0xffff0274  // b.lo, b.ul, b.last
+
+; And the above will branch if w22 < w19 (given unsigned values)
+;  the uxtw notation (to do an unsigned extend) comfirms the unsigned context
+
+; It is vital to know whether the values are intended to be treated as signed or unsigned
+; It is also vital to consider the order of the two items.
+
+; Let's talk about  "cmp reg, #val", which is a common idiom.
+; In this case (thinking unsigned) b.cs is a branch if reg >= val
+; In the other case (thinking unsigned) b.cc is a branch if reg < val
+
+; A note on the uxtw notation in the above is in order.
+; We can have uxt[b,h,w].
+; These indicate to zero extend a byte, halfword (16 bits), or word (32 bits)
+;  from the source element
+;
+; I also see "uxtx" in a handful of adds, as in the following
+;  add     x6, x0, x1, uxtx #4
+; These are all already 64 bit registers, so I don't see the point,
+;  but I am going to pass this by for now.
 
 ; ==========================================================================
 ; ==========================================================================
@@ -1723,7 +1773,7 @@ ffff1130:	b9000700 	str	w0, [x24, #4]
 ffff1134:	d2800302 	mov	x2, #0x18                  	// #24
 ffff1138:	aa1703e0 	mov	x0, x23
 ffff113c:	aa1f03e1 	mov	x1, xzr
-ffff1140:	94000ccf 	bl	0xffff447c
+ffff1140:	94000ccf 	bl	0xffff447c		; memset
 ffff1144:	f0ffc660 	adrp	x0, 0xff8c0000
 ffff1148:	b9402c00 	ldr	w0, [x0, #0x2c]
 ffff114c:	0b400ec1 	add	w1, w22, w0, lsr #3
@@ -3254,7 +3304,7 @@ ffff27dc:	910dc013 	add	x19, x0, #0x370
 ffff27e0:	d2801002 	mov	x2, #0x80
 ffff27e4:	aa1303e0 	mov	x0, x19
 ffff27e8:	aa1f03e1 	mov	x1, xzr
-ffff27ec:	94000724 	bl	0xffff447c
+ffff27ec:	94000724 	bl	0xffff447c		; memset
 ffff27f0:	f0000000 	adrp	x0, 0xffff5000
 ffff27f4:	b9412800 	ldr	w0, [x0, #0x128]	; ffff5128: fe80c100
 ffff27f8:	f9002660 	str	x0, [x19, #0x48]
@@ -3277,7 +3327,7 @@ ffff2838:	f9000e80 	str	x0, [x20, #24]
 ffff283c:	f9020820 	str	x0, [x1, #0x410]
 ffff2840:	d2802002 	mov	x2, #0x100
 ffff2844:	aa1f03e1 	mov	x1, xzr
-ffff2848:	9400070d 	bl	0xffff447c
+ffff2848:	9400070d 	bl	0xffff447c		; memset
 ffff284c:	f0000000 	adrp	x0, 0xffff5000
 ffff2850:	b9412c00 	ldr	w0, [x0, #0x12c]	; ffff512c: fe80c704
 ffff2854:	52a80001 	mov	w1, #0x40000000
@@ -4314,7 +4364,7 @@ ffff3810:	f9000260 	str	x0, [x19]
 ffff3814:	f9000e60 	str	x0, [x19, #24]
 ffff3818:	d2800802 	mov	x2, #0x40                  	// #64
 ffff381c:	aa1f03e1 	mov	x1, xzr
-ffff3820:	94000317 	bl	0xffff447c
+ffff3820:	94000317 	bl	0xffff447c		; memset
 ffff3824:	b0ffc660 	adrp	x0, 0xff8c0000
 ffff3828:	910fc001 	add	x1, x0, #0x3f0
 ffff382c:	f9000661 	str	x1, [x19, #8]
@@ -4329,13 +4379,13 @@ ffff384c:	f9000a60 	str	x0, [x19, #16]
 ffff3850:	f9001660 	str	x0, [x19, #0x28]
 ffff3854:	d2800802 	mov	x2, #0x40                  	// #64
 ffff3858:	aa1f03e1 	mov	x1, xzr
-ffff385c:	94000308 	bl	0xffff447c
+ffff385c:	94000308 	bl	0xffff447c		; memset
 ffff3860:	b0ffc660 	adrp	x0, 0xff8c0000
 ffff3864:	910c6014 	add	x20, x0, #0x318
 ffff3868:	d2800502 	mov	x2, #0x28                  	// #40
 ffff386c:	aa1403e0 	mov	x0, x20
 ffff3870:	aa1f03e1 	mov	x1, xzr
-ffff3874:	94000302 	bl	0xffff447c
+ffff3874:	94000302 	bl	0xffff447c		; memset
 ffff3878:	f9000693 	str	x19, [x20, #8]
 ffff387c:	3900829f 	strb	wzr, [x20, #32]
 ffff3880:	39008e9f 	strb	wzr, [x20, #0x23]
@@ -4345,7 +4395,7 @@ ffff388c:	9100a295 	add	x21, x20, #0x28
 ffff3890:	d2800502 	mov	x2, #0x28                  	// #40
 ffff3894:	aa1503e0 	mov	x0, x21
 ffff3898:	aa1f03e1 	mov	x1, xzr
-ffff389c:	940002f8 	bl	0xffff447c
+ffff389c:	940002f8 	bl	0xffff447c		; memset
 ffff38a0:	f9001a93 	str	x19, [x20, #0x30]
 ffff38a4:	52800020 	mov	w0, #0x1                   	// #1
 ffff38a8:	39012280 	strb	w0, [x20, #0x48]
@@ -5211,6 +5261,7 @@ ffff4448:	2a0303e0 	mov	w0, w3
 ffff444c:	d65f03c0 	ret
 
 ;  ==============================================
+
 ; subroutine, many calls --- memcpy
 ; just a wrapper around call to ffff4534
 ;  and the only call to that routine (so why not inline it?)
@@ -5233,30 +5284,78 @@ ffff4474:	910083ff 	add	sp, sp, #0x20
 ffff4478:	d65f03c0 	ret
 
 ;  ==============================================
-; subroutine, many calls
-ffff447c:	d10083ff 	sub	sp, sp, #0x20
+;
+; subroutine, "memset"
+;
+; a typical call looks like this and never cares about
+; a return value in x0.
+
+;		mov	x2, #0x28
+;		mov	x0, x20
+;		mov	x1, xzr
+;		bl	0xffff447c
+;
+;	So x0 is some sort of address, x1 is always zero, x2 is a count
+
+ffff447c:	d10083ff 	sub	sp, sp, #0x20	; standard prolog
 ffff4480:	f9000bfe 	str	x30, [sp, #16]
 ffff4484:	a90077f3 	stp	x19, x29, [sp]
 ffff4488:	910023fd 	add	x29, sp, #0x8
 
-ffff448c:	aa0003f3 	mov	x19, x0
-ffff4490:	2a0103e0 	mov	w0, w1
-ffff4494:	aa0203e1 	mov	x1, x2
-ffff4498:	12001c03 	and	w3, w0, #0xff
-ffff449c:	0b032063 	add	w3, w3, w3, lsl #8
-ffff44a0:	0b034062 	add	w2, w3, w3, lsl #16
-ffff44a4:	aa1303e0 	mov	x0, x19
+; This is memset.
+; we take the value in x1 as a byte and duplicate it 4 times in w2
+; the count (in bytes) we do not change, but we do move
+; the count and address to different registers
+
+ffff448c:	aa0003f3 	mov	x19, x0		; preserve x0 (addr)
+ffff4490:	2a0103e0 	mov	w0, w1		; x0 = val
+ffff4494:	aa0203e1 	mov	x1, x2		; x1 = count
+ffff4498:	12001c03 	and	w3, w0, #0xff		; w3 = val & 0xff
+ffff449c:	0b032063 	add	w3, w3, w3, lsl #8	; w3 = val<<8 + val
+ffff44a0:	0b034062 	add	w2, w3, w3, lsl #16	; w2 = w3<<16 + w3
+ffff44a4:	aa1303e0 	mov	x0, x19		; restore x0 (addr)
+
+; It is odd that this is the only call to a block of code below
+; why not just put it inline right here?
+; why jam "memcpy" between here and there?
+
+; at this point --
+; x0 is some address
+; x1 is a count
+; w2 is a value to store
+
 ffff44a8:	94000066 	bl	0xffff4640
 
-; here is a proper return
-ffff44ac:	aa1303e0 	mov	x0, x19
-ffff44b0:	a94077f3 	ldp	x19, x29, [sp]
+ffff44ac:	aa1303e0 	mov	x0, x19		; restore x0 for the caller
+
+ffff44b0:	a94077f3 	ldp	x19, x29, [sp]	; proper return
 ffff44b4:	f9400bfe 	ldr	x30, [sp, #16]
 ffff44b8:	910083ff 	add	sp, sp, #0x20
 ffff44bc:	d65f03c0 	ret
 
+; ==========================================
+
+; Accesory and "finish" to memcpy below.
+
+; We jump here from the memcpy code below
+; This copies from x1 to x0 with a count in x2
+; Something has been done such that x0 and x1 are 16 byte aligned
+; to start this loop.  It takes care of any extra bytes at
+; the end
+
+; what is this instruction doing?  It is a jump into the loop below
+; it is jumped to from the memcpy code below.
+; That code could just as well jump directly to ffff44e0
+;  but maybe someone thought it would be "proper" to jump to
+; this instruction at the top of this code.
 ffff44c0:	14000008 	b	0xffff44e0
-ffff44c4:	29401023 	ldp	w3, w4, [x1]
+
+; ---
+; This loop moves 16 bytes at a time from *x1 to *x2
+; It seems odd to use a two pairs of 32 bit "w" registers for this
+; rather than a single pair of 64 bit registers.
+
+ffff44c4:	29401023 	ldp	w3, w4, [x1]		; move 16 bytes
 ffff44c8:	29411825 	ldp	w5, w6, [x1, #8]
 ffff44cc:	29001003 	stp	w3, w4, [x0]
 ffff44d0:	29011805 	stp	w5, w6, [x0, #8]
@@ -5265,33 +5364,43 @@ ffff44d8:	91004021 	add	x1, x1, #0x10
 ffff44dc:	d1004042 	sub	x2, x2, #0x10
 
 ffff44e0:	f100405f 	cmp	x2, #0x10
-ffff44e4:	54ffff02 	b.cs	0xffff44c4  // b.hs, b.nlast
+ffff44e4:	54ffff02 	b.cs	0xffff44c4  ; loop if x2 >= 0x10
+
 ffff44e8:	f100205f 	cmp	x2, #0x8
-ffff44ec:	540000c3 	b.cc	0xffff4504  // b.lo, b.ul, b.last
-ffff44f0:	29401023 	ldp	w3, w4, [x1]
+ffff44ec:	540000c3 	b.cc	0xffff4504  ; branch if x2 < 8
+
+ffff44f0:	29401023 	ldp	w3, w4, [x1]	; move 8 bytes
 ffff44f4:	29001003 	stp	w3, w4, [x0]
 ffff44f8:	91002000 	add	x0, x0, #0x8
 ffff44fc:	91002021 	add	x1, x1, #0x8
 ffff4500:	d1002042 	sub	x2, x2, #0x8
 
 ffff4504:	f100105f 	cmp	x2, #0x4
-ffff4508:	540000e3 	b.cc	0xffff4524  // b.lo, b.ul, b.last
-ffff450c:	b8404423 	ldr	w3, [x1], #4
+ffff4508:	540000e3 	b.cc	0xffff4524  ; branch if x2 < 4
+
+ffff450c:	b8404423 	ldr	w3, [x1], #4	; move 4 bytes
 ffff4510:	b8004403 	str	w3, [x0], #4
 ffff4514:	d1001042 	sub	x2, x2, #0x4
 ffff4518:	14000003 	b	0xffff4524
 
-ffff451c:	38401423 	ldrb	w3, [x1], #1
+; final loop to move 0,1,2, or 3 bytes
+ffff451c:	38401423 	ldrb	w3, [x1], #1	; move 1 byte
 ffff4520:	38001403 	strb	w3, [x0], #1
+
 ffff4524:	d1000442 	sub	x2, x2, #0x1
 ffff4528:	b100045f 	cmn	x2, #0x1
 ffff452c:	54ffff81 	b.ne	0xffff451c
-; returning here violates the prolog and trashes the stack.
+
+; a "bare" routine, so this must be called in some way
+; that entered without a prolog.
 ffff4530:	d65f03c0 	ret
 
 ;  ==============================================
+
 ; subroutine -- essentially memcpy ( dest, src, count)
-; called only from above
+; called only from the wrapper above
+; the wrapper provides the prolog, this code is "bare"
+
 ffff4534:	f100105f 	cmp	x2, #0x4
 ffff4538:	540004e3 	b.cc	0xffff45d4
 ; here with count >= 4
@@ -5325,7 +5434,11 @@ ffff459c:	4b050064 	sub	w4, w3, w5
 ffff45a0:	b8404423 	ldr	w3, [x1], #4
 ffff45a4:	14000008 	b	0xffff45c4
 
-ffff45a8:	17ffffc6 	b	0xffff44c0
+; We jump to code up above to finish the copy
+; that code expects x0 and x1 to both be 16 byte aligned
+; and will finish the copy, then return directly.
+
+ffff45a8:	17ffffc6 	b	0xffff44c0	; odd jump to up above
 
 ; loop, move 4 bytes at a time.
 ffff45ac:	1ac52466 	lsr	w6, w3, w5
@@ -5355,48 +5468,54 @@ ffff4600:	39000001 	strb	w1, [x0]
 ffff4604:	d65f03c0 	ret
 
 ;  ==============================================
-; This block of code is some kind of odd "accessory"
-; to a subroutine above.
+; This block of code is the guts to "memset" above
 ; who knows why it is floating around down here below memcpy
+;
+; x0 is some address
+; x1 is a count
+; w2 is a value to store
 
 ; loop A
 ffff4608:	14000003 	b	0xffff4614
-ffff460c:	b8004402 	str	w2, [x0], #4
+
+ffff460c:	b8004402 	str	w2, [x0], #4	; *x0++ = w2 (4 bytes)
 ffff4610:	d1001021 	sub	x1, x1, #0x4
 ffff4614:	f100103f 	cmp	x1, #0x4
-ffff4618:	54ffffa2 	b.cs	0xffff460c
+ffff4618:	54ffffa2 	b.cs	0xffff460c	; loop while x1 >= 4
+
 ffff461c:	927f0023 	and	x3, x1, #0x2
 ffff4620:	f100007f 	cmp	x3, #0x0
 ffff4624:	54000040 	b.eq	0xffff462c
-ffff4628:	78002402 	strh	w2, [x0], #2
+ffff4628:	78002402 	strh	w2, [x0], #2	; *x0++ = w2 (2 bytes)
 ffff462c:	92400021 	and	x1, x1, #0x1
 ffff4630:	f100003f 	cmp	x1, #0x0
 ffff4634:	54000040 	b.eq	0xffff463c
-ffff4638:	39000002 	strb	w2, [x0]
+ffff4638:	39000002 	strb	w2, [x0]	; *x0 = w2 (1 byte)
+
 ffff463c:	d65f03c0 	ret			; done
 
-; loop B call to here from above
+; loop B -- call to here from above
 ffff4640:	f100043f 	cmp	x1, #0x1
-ffff4644:	540000c3 	b.cc	0xffff465c
+ffff4644:	540000c3 	b.cc	0xffff465c	; branch if < 1
 ffff4648:	12000003 	and	w3, w0, #0x1
 ffff464c:	7100007f 	cmp	w3, #0x0
 ffff4650:	54000060 	b.eq	0xffff465c
-ffff4654:	38001402 	strb	w2, [x0], #1
+ffff4654:	38001402 	strb	w2, [x0], #1	; *x0++ = w2
 ffff4658:	d1000421 	sub	x1, x1, #0x1
 ffff465c:	f100083f 	cmp	x1, #0x2
-ffff4660:	540000c3 	b.cc	0xffff4678
+ffff4660:	540000c3 	b.cc	0xffff4678	; branch if < 2
 ffff4664:	121f0003 	and	w3, w0, #0x2
 ffff4668:	7100007f 	cmp	w3, #0x0
 ffff466c:	54000060 	b.eq	0xffff4678
-ffff4670:	78002402 	strh	w2, [x0], #2
+ffff4670:	78002402 	strh	w2, [x0], #2	; *x0++ = w2
 ffff4674:	d1000821 	sub	x1, x1, #0x2
 ffff4678:	17ffffe4 	b	0xffff4608		; loop up A
 
-; no path to here either
+; no path to here ...
 ffff467c:	52800002 	mov	w2, #0x0
 ffff4680:	17fffff0 	b	0xffff4640		; loop up B
 
-; no path to here
+; no path to here either ...
 ffff4684:	52800002 	mov	w2, #0x0
 ffff4688:	17ffffe0 	b	0xffff4608		; loop up A
 
