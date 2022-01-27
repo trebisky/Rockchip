@@ -1,5 +1,7 @@
 Study of the Rockchip RK3399 bootrom
 
+The file to look at is bootrom.txt
+
 I wrote bare_dump to be able to extract this
 (which seems to be read protected by the time U-Boot
 is running).  I used bare_dump to dump the addresses
