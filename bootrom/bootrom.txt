@@ -55,6 +55,9 @@
 ;  0xff790000 - GPIO4
 ;  0xfffa0000 - Efuse1
 ;
+;  0xfe380000 - USB2 host 0 - never seen
+;  0xfe3c0000 - USB2 host 1 - never seen
+;  0xfe90xxxx - USB_OTG1 - never seen
 ;  0xff6D0000 - DMA0 -- never seen
 ;  0xff6E0000 - DMA1 -- never seen
 ;  0xff100000 - SARADC - never seen
@@ -3284,7 +3287,10 @@ ffff27ac:	a9417bfd 	ldp	x29, x30, [sp, #16]
 ffff27b0:	910083ff 	add	sp, sp, #0x20
 ffff27b4:	d65f03c0 	ret
 
-; subroutine - there isa huge mass of code here related to USB
+; =================================================================
+
+; subroutine - there is mass of code here related to USB
+;  call it "usb_init"
 ; fe80xxxx is USB_OTG0
 
 ffff27b8:	d10083ff 	sub	sp, sp, #0x20
@@ -3292,151 +3298,228 @@ ffff27bc:	a9017bfd 	stp	x29, x30, [sp, #16]
 ffff27c0:	910043fd 	add	x29, sp, #0x10
 ffff27c4:	a90053f3 	stp	x19, x20, [sp]
 
+; an undocumented register in PMU_SGRF
 ffff27c8:	f0000000 	adrp	x0, 0xffff5000
 ffff27cc:	b9412400 	ldr	w0, [x0, #0x124]	; ffff5124: ff33e014
 ffff27d0:	52a60001 	mov	w1, #0x30000000
 ffff27d4:	b9000001 	str	w1, [x0]
 
 ; x19 is the base of an area in SRAM this uses
-;  at ff8c0370, let's call it "io"
-ffff27d8:	d0ffc660 	adrp	x0, 0xff8c0000		; SRAM
-ffff27dc:	910dc013 	add	x19, x0, #0x370
+;  at ff8c0370, let's call it "usb"
+ffff27d8:	d0ffc660 	adrp	x0, 0xff8c0000
+ffff27dc:	910dc013 	add	x19, x0, #0x370		; SRAM + 0x370
+
 ffff27e0:	d2801002 	mov	x2, #0x80
 ffff27e4:	aa1303e0 	mov	x0, x19
 ffff27e8:	aa1f03e1 	mov	x1, xzr
-ffff27ec:	94000724 	bl	0xffff447c		; memset
+ffff27ec:	94000724 	bl	0xffff447c		; memset ( "usb", 0x80, 0 )
+
+; This fetches a USB hardware base address
 ffff27f0:	f0000000 	adrp	x0, 0xffff5000
 ffff27f4:	b9412800 	ldr	w0, [x0, #0x128]	; ffff5128: fe80c100
-ffff27f8:	f9002660 	str	x0, [x19, #0x48]
+
+ffff27f8:	f9002660 	str	x0, [x19, #0x48]	; usb_48 = BASE
 ffff27fc:	52800060 	mov	w0, #0x3
-ffff2800:	b9005660 	str	w0, [x19, #0x54]
-ffff2804:	b900627f 	str	wzr, [x19, #0x60]
+ffff2800:	b9005660 	str	w0, [x19, #0x54]	; usb_54 = 3
+ffff2804:	b900627f 	str	wzr, [x19, #0x60]	; usb_60 = 0
 ffff2808:	d0ffc661 	adrp	x1, 0xff8c0000
-ffff280c:	91104034 	add	x20, x1, #0x410
+ffff280c:	91104034 	add	x20, x1, #0x410		; SRAM + 0x410
 ffff2810:	f9000a9f 	str	xzr, [x20, #16]
 ffff2814:	f900069f 	str	xzr, [x20, #8]
 ffff2818:	f902083f 	str	xzr, [x1, #0x410]
 ffff281c:	52800020 	mov	w0, #0x1
-ffff2820:	b9005260 	str	w0, [x19, #0x50]
+ffff2820:	b9005260 	str	w0, [x19, #0x50]	; usb_50 = 1
 ffff2824:	f9001293 	str	x19, [x20, #32]
 ffff2828:	52802000 	mov	w0, #0x100
 ffff282c:	b9000a80 	str	w0, [x20, #8]
+
 ffff2830:	d0ffc660 	adrp	x0, 0xff8c0000
-ffff2834:	91084000 	add	x0, x0, #0x210
+ffff2834:	91084000 	add	x0, x0, #0x210		; SRAM + 0x210
 ffff2838:	f9000e80 	str	x0, [x20, #24]
 ffff283c:	f9020820 	str	x0, [x1, #0x410]
 ffff2840:	d2802002 	mov	x2, #0x100
 ffff2844:	aa1f03e1 	mov	x1, xzr
-ffff2848:	9400070d 	bl	0xffff447c		; memset
+ffff2848:	9400070d 	bl	0xffff447c		; memset ( x0, 0x100, 0 )
+
+; This fetches another USB hardware base address (0xc704)
+; This is the USB device control register.
+; The bit set is "core soft reset" and is self clearing.
+; See trm2 page 147
 ffff284c:	f0000000 	adrp	x0, 0xffff5000
 ffff2850:	b9412c00 	ldr	w0, [x0, #0x12c]	; ffff512c: fe80c704
 ffff2854:	52a80001 	mov	w1, #0x40000000
-ffff2858:	b9000001 	str	w1, [x0]
-ffff285c:	f9402660 	ldr	x0, [x19, #0x48]
+ffff2858:	b9000001 	str	w1, [x0]		; write to USB hw
+
+ffff285c:	f9402660 	ldr	x0, [x19, #0x48]	; get USB_48 (base)
+
+; Now a timeout loop waiting for that
+; self clearning bit to clear
 ffff2860:	928270e2 	mov	x2, #0xffffffffffffec78    	// #-5000
+; loop start
 ffff2864:	aa0203e1 	mov	x1, x2
 ffff2868:	b4000081 	cbz	x1, 0xffff2878
-ffff286c:	b9460403 	ldr	w3, [x0, #0x604]
+
+; Here is another way to get the USB device control register at 0xc704
+ffff286c:	b9460403 	ldr	w3, [x0, #0x604]	; USB dctrl
 ffff2870:	91000422 	add	x2, x1, #0x1
-ffff2874:	37f7ff83 	tbnz	w3, #30, 0xffff2864
+ffff2874:	37f7ff83 	tbnz	w3, #30, 0xffff2864	; loop
+
+; reset is finished
+; if we did timeout (reset failed) bypass
+; the rest of USB initialization
 ffff2878:	12800000 	mov	w0, #0xffffffff            	// #-1
 ffff287c:	b100043f 	cmn	x1, #0x1
 ffff2880:	54000a20 	b.eq	0xffff29c4  // b.none
 
-ffff2884:	f9402660 	ldr	x0, [x19, #0x48]
-ffff2888:	b9401001 	ldr	w1, [x0, #16]
+; 0xc110 is global core control
+;  assert core soft reset
+ffff2884:	f9402660 	ldr	x0, [x19, #0x48]	; 0xc100
+ffff2888:	b9401001 	ldr	w1, [x0, #16]		; read from c110
 ffff288c:	32150021 	orr	w1, w1, #0x800
 ffff2890:	b9001001 	str	w1, [x0, #16]
+
+; 0xc2c0 is pipe control register 0
+;  assert PHY soft reset
 ffff2894:	f9402660 	ldr	x0, [x19, #0x48]
 ffff2898:	b941c001 	ldr	w1, [x0, #0x1c0]
 ffff289c:	32010021 	orr	w1, w1, #0x80000000
 ffff28a0:	b901c001 	str	w1, [x0, #0x1c0]
+
+; 0xc200 is USB2 PHY config register 0
+; asset UTMI phy soft reset
 ffff28a4:	f9402660 	ldr	x0, [x19, #0x48]
 ffff28a8:	b9410001 	ldr	w1, [x0, #0x100]
 ffff28ac:	32010021 	orr	w1, w1, #0x80000000
 ffff28b0:	b9010001 	str	w1, [x0, #0x100]
+
 ffff28b4:	52800c80 	mov	w0, #0x64
 ffff28b8:	97fff874 	bl	0xffff0a88		; mmdelay ( 100 )
+
+; 0xc2c0 is pipe control register 0
+; clear the PHY reset bit
 ffff28bc:	f9402660 	ldr	x0, [x19, #0x48]
 ffff28c0:	b941c001 	ldr	w1, [x0, #0x1c0]
 ffff28c4:	12007821 	and	w1, w1, #0x7fffffff
 ffff28c8:	b901c001 	str	w1, [x0, #0x1c0]
+
+; 0xc200 is USB2 PHY config register 0
+; clear the PHY reset bit
 ffff28cc:	f9402660 	ldr	x0, [x19, #0x48]
 ffff28d0:	b9410001 	ldr	w1, [x0, #0x100]
 ffff28d4:	12007821 	and	w1, w1, #0x7fffffff
 ffff28d8:	b9010001 	str	w1, [x0, #0x100]
+
 ffff28dc:	52800c80 	mov	w0, #0x64
 ffff28e0:	97fff86a 	bl	0xffff0a88		; mmdelay ( 100 )
+
+; 0xc110 is global core control
+; clear the soft reset bit
 ffff28e4:	f9402660 	ldr	x0, [x19, #0x48]
 ffff28e8:	b9401001 	ldr	w1, [x0, #16]
 ffff28ec:	12147821 	and	w1, w1, #0xfffff7ff
 ffff28f0:	b9001001 	str	w1, [x0, #16]
+
+; also clear scale-down and scrambling
 ffff28f4:	f9402660 	ldr	x0, [x19, #0x48]
 ffff28f8:	b9401001 	ldr	w1, [x0, #16]
 ffff28fc:	121a7021 	and	w1, w1, #0xffffffc7
 ffff2900:	b9001001 	str	w1, [x0, #16]
+
 ffff2904:	b9405660 	ldr	w0, [x19, #0x54]
 ffff2908:	71000c1f 	cmp	w0, #0x3
 ffff290c:	540000a1 	b.ne	0xffff2920  // b.any
+
+; 0xc11c is global user control
+; This bit forces 2.0 clock for 3.0 clock
 ffff2910:	f9402660 	ldr	x0, [x19, #0x48]
 ffff2914:	b9401c01 	ldr	w1, [x0, #28]
 ffff2918:	32060021 	orr	w1, w1, #0x4000000
 ffff291c:	b9001c01 	str	w1, [x0, #28]
+
+; 0xc2c0 is pipe control register 0
+; this bit suspends USB 3 PHY
 ffff2920:	f9402660 	ldr	x0, [x19, #0x48]
 ffff2924:	b941c001 	ldr	w1, [x0, #0x1c0]
 ffff2928:	320f0021 	orr	w1, w1, #0x20000
 ffff292c:	b901c001 	str	w1, [x0, #0x1c0]
+
 ffff2930:	52800c80 	mov	w0, #0x64
 ffff2934:	97fff855 	bl	0xffff0a88		; mmdelay ( 100 )
+
+; 0xc200 is USB2 PHY config register 0
+; clear bit 30 (freeclk exists bit)
+; bits 13:10 are turnaround time (set to 5) for 15 bit UTMI+
+; clear bit 8 (enable utmi sleep)
+; set bit 3 (select 16 bit PHY)
 ffff2938:	f9402660 	ldr	x0, [x19, #0x48]
 ffff293c:	b9410001 	ldr	w1, [x0, #0x100]
 ffff2940:	f0000002 	adrp	x2, 0xffff5000
-ffff2944:	b9413042 	ldr	w2, [x2, #0x130]
+ffff2944:	b9413042 	ldr	w2, [x2, #0x130]	; ffff5130: bfffc2f7
 ffff2948:	0a020021 	and	w1, w1, w2
 ffff294c:	52828102 	mov	w2, #0x1408                	// #5128
 ffff2950:	2a020021 	orr	w1, w1, w2
 ffff2954:	b9010001 	str	w1, [x0, #0x100]
+
 ffff2958:	52800c80 	mov	w0, #0x64
 ffff295c:	97fff84b 	bl	0xffff0a88		; mmdelay ( 100 )
+
 ffff2960:	b9000e9f 	str	wzr, [x20, #12]
+
+; Write 4 bytes to C400 ... copied from SRAM
+; 0xc400 is event buffer addr, low 32 bits
+; 0xc404 is event buffer addr, high 32 bits
+; 0xc408 is event buffer size in bytes
+; 0xc40c is event buffer count in bytes
 ffff2964:	f9402660 	ldr	x0, [x19, #0x48]
-ffff2968:	f9400e81 	ldr	x1, [x20, #24]
+ffff2968:	f9400e81 	ldr	x1, [x20, #24]		; from usb+0x24
 ffff296c:	b9030001 	str	w1, [x0, #0x300]
+
 ffff2970:	f9402660 	ldr	x0, [x19, #0x48]
 ffff2974:	b9401e81 	ldr	w1, [x20, #28]
 ffff2978:	b9030401 	str	w1, [x0, #0x304]
+
 ffff297c:	f9402660 	ldr	x0, [x19, #0x48]
 ffff2980:	79401281 	ldrh	w1, [x20, #8]
 ffff2984:	b9030801 	str	w1, [x0, #0x308]
+
 ffff2988:	f9402660 	ldr	x0, [x19, #0x48]
 ffff298c:	b9030c1f 	str	wzr, [x0, #0x30c]
+
+; 0xc110 is global core control
+; set port capability direction
+; We set b10 for device rather than host
 ffff2990:	f9402660 	ldr	x0, [x19, #0x48]
 ffff2994:	b9401001 	ldr	w1, [x0, #16]
 ffff2998:	12127421 	and	w1, w1, #0xffffcfff
 ffff299c:	32130021 	orr	w1, w1, #0x2000
 ffff29a0:	b9001001 	str	w1, [x0, #16]
+
 ffff29a4:	aa1303e0 	mov	x0, x19
-ffff29a8:	94000392 	bl	0xffff37f0
+ffff29a8:	94000392 	bl	0xffff37f0	; usb_init1 ( "usb" )
 ffff29ac:	aa1303e0 	mov	x0, x19
-ffff29b0:	940002f1 	bl	0xffff3574
-ffff29b4:	52800021 	mov	w1, #0x1                   	// #1
+ffff29b0:	940002f1 	bl	0xffff3574	; usb_init2 ( "usb" )
+ffff29b4:	52800021 	mov	w1, #0x1
 ffff29b8:	aa1303e0 	mov	x0, x19
-ffff29bc:	940002c8 	bl	0xffff34dc
+ffff29bc:	940002c8 	bl	0xffff34dc	; usb_init3 ( "usb", 1 )
 ffff29c0:	2a1f03e0 	mov	w0, wzr
+
 ffff29c4:	a94053f3 	ldp	x19, x20, [sp]
 ffff29c8:	a9417bfd 	ldp	x29, x30, [sp, #16]
 ffff29cc:	910083ff 	add	sp, sp, #0x20
 ffff29d0:	d65f03c0 	ret
 
-; continued from above
+; =====================
+; called from below (the only call)
 ffff29d4:	f9400c02 	ldr	x2, [x0, #24]
 ffff29d8:	52800103 	mov	w3, #0x8                   	// #8
 ffff29dc:	52800404 	mov	w4, #0x20                  	// #32
 ffff29e0:	aa1f03e1 	mov	x1, xzr
 ffff29e4:	aa1f03e5 	mov	x5, xzr
-ffff29e8:	14000001 	b	0xffff29ec
 
+; ha - why this?
+ffff29e8:	14000001 	b	0xffff29ec
 ffff29ec:	d100c3ff 	sub	sp, sp, #0x30
+
 ffff29f0:	a9027bfd 	stp	x29, x30, [sp, #32]
 ffff29f4:	910083fd 	add	x29, sp, #0x20
 ffff29f8:	a90153f3 	stp	x19, x20, [sp, #16]
@@ -3869,10 +3952,10 @@ ffff3074:	34000340 	cbz	w0, 0xffff30dc
 ffff3078:	528000e0 	mov	w0, #0x7                   	// #7
 ffff307c:	b9006260 	str	w0, [x19, #0x60]
 ffff3080:	f9402660 	ldr	x0, [x19, #0x48]
-ffff3084:	b9460401 	ldr	w1, [x0, #0x604]
+ffff3084:	b9460401 	ldr	w1, [x0, #0x604]	; USB dctrl
 ffff3088:	52814002 	mov	w2, #0xa00                 	// #2560
 ffff308c:	2a020021 	orr	w1, w1, w2
-ffff3090:	b9060401 	str	w1, [x0, #0x604]
+ffff3090:	b9060401 	str	w1, [x0, #0x604]	; USB dctrl
 ffff3094:	14000012 	b	0xffff30dc
 ffff3098:	f9402260 	ldr	x0, [x19, #0x40]
 ffff309c:	52800035 	mov	w21, #0x1                   	// #1
@@ -4118,6 +4201,7 @@ ffff343c:	a9427bfd 	ldp	x29, x30, [sp, #32]
 ffff3440:	9100c3ff 	add	sp, sp, #0x30
 ffff3444:	d65f03c0 	ret
 
+; subroutine
 ffff3448:	d100c3ff 	sub	sp, sp, #0x30
 ffff344c:	a9027bfd 	stp	x29, x30, [sp, #32]
 ffff3450:	910083fd 	add	x29, sp, #0x20
@@ -4155,6 +4239,12 @@ ffff34cc:	f9400ff3 	ldr	x19, [sp, #24]
 ffff34d0:	a9427bfd 	ldp	x29, x30, [sp, #32]
 ffff34d4:	9100c3ff 	add	sp, sp, #0x30
 ffff34d8:	d65f03c0 	ret
+
+; usb_init3 ( usb, 1 )
+; subroutine, called once during usb initialization
+; passed x0 as pointer to usb control structure in SRAM
+; passed x1 = 1
+
 ffff34dc:	d100c3ff 	sub	sp, sp, #0x30
 ffff34e0:	a9027bfd 	stp	x29, x30, [sp, #32]
 ffff34e4:	910083fd 	add	x29, sp, #0x20
@@ -4162,7 +4252,7 @@ ffff34e8:	a90157f4 	stp	x20, x21, [sp, #16]
 ffff34ec:	f90007f3 	str	x19, [sp, #8]
 ffff34f0:	aa0003f3 	mov	x19, x0
 ffff34f4:	f9402660 	ldr	x0, [x19, #0x48]
-ffff34f8:	b9460400 	ldr	w0, [x0, #0x604]
+ffff34f8:	b9460400 	ldr	w0, [x0, #0x604]	; USB dctrl
 ffff34fc:	aa0103f4 	mov	x20, x1
 ffff3500:	340000b4 	cbz	w20, 0xffff3514
 ffff3504:	12b00101 	mov	w1, #0x7ff7ffff            	// #2146959359
@@ -4171,7 +4261,7 @@ ffff350c:	32010000 	orr	w0, w0, #0x80000000
 ffff3510:	14000002 	b	0xffff3518
 ffff3514:	12007800 	and	w0, w0, #0x7fffffff
 ffff3518:	f9402661 	ldr	x1, [x19, #0x48]
-ffff351c:	b9060420 	str	w0, [x1, #0x604]
+ffff351c:	b9060420 	str	w0, [x1, #0x604]	; USB dctrl
 ffff3520:	12803e75 	mov	w21, #0xfffffe0c            	// #-500
 ffff3524:	14000003 	b	0xffff3530
 ffff3528:	52800020 	mov	w0, #0x1                   	// #1
@@ -4193,6 +4283,11 @@ ffff3564:	a94157f4 	ldp	x20, x21, [sp, #16]
 ffff3568:	a9427bfd 	ldp	x29, x30, [sp, #32]
 ffff356c:	9100c3ff 	add	sp, sp, #0x30
 ffff3570:	d65f03c0 	ret
+
+; usb_init2 ( usb )
+; subroutine, called once during usb initialization
+; passed x0 as pointer to usb control structure in SRAM
+
 ffff3574:	d10083ff 	sub	sp, sp, #0x20
 ffff3578:	a9017bfd 	stp	x29, x30, [sp, #16]
 ffff357c:	910043fd 	add	x29, sp, #0x10
@@ -4237,10 +4332,10 @@ ffff3614:	f9402260 	ldr	x0, [x19, #0x40]
 ffff3618:	aa1f03e1 	mov	x1, xzr
 ffff361c:	9400000e 	bl	0xffff3654
 ffff3620:	35000120 	cbnz	w0, 0xffff3644
-ffff3624:	52800020 	mov	w0, #0x1                   	// #1
+ffff3624:	52800020 	mov	w0, #0x1
 ffff3628:	b9005e60 	str	w0, [x19, #0x5c]
 ffff362c:	aa1303e0 	mov	x0, x19
-ffff3630:	97fffce9 	bl	0xffff29d4
+ffff3630:	97fffce9 	bl	0xffff29d4		; call odd piece above
 ffff3634:	f9402661 	ldr	x1, [x19, #0x48]
 ffff3638:	2a1f03e0 	mov	w0, wzr
 ffff363c:	5283c3e2 	mov	w2, #0x1e1f                	// #7711
@@ -4249,6 +4344,7 @@ ffff3644:	f94007f3 	ldr	x19, [sp, #8]
 ffff3648:	a9417bfd 	ldp	x29, x30, [sp, #16]
 ffff364c:	910083ff 	add	sp, sp, #0x20
 ffff3650:	d65f03c0 	ret
+
 ffff3654:	d10183ff 	sub	sp, sp, #0x60
 ffff3658:	a9057bfd 	stp	x29, x30, [sp, #80]
 ffff365c:	910143fd 	add	x29, sp, #0x50
@@ -4352,11 +4448,17 @@ ffff37e0:	a94463f7 	ldp	x23, x24, [sp, #64]
 ffff37e4:	a9457bfd 	ldp	x29, x30, [sp, #80]
 ffff37e8:	910183ff 	add	sp, sp, #0x60
 ffff37ec:	d65f03c0 	ret
+
+; usb_init1 ( usb )
+; subroutine, called once during usb initialization
+; passed x0 as pointer to usb control structure in SRAM
+
 ffff37f0:	d100c3ff 	sub	sp, sp, #0x30
 ffff37f4:	a9027bfd 	stp	x29, x30, [sp, #32]
 ffff37f8:	910083fd 	add	x29, sp, #0x20
 ffff37fc:	a90157f4 	stp	x20, x21, [sp, #16]
 ffff3800:	f90007f3 	str	x19, [sp, #8]
+
 ffff3804:	aa0003f3 	mov	x19, x0
 ffff3808:	b0ffc660 	adrp	x0, 0xff8c0000
 ffff380c:	91070000 	add	x0, x0, #0x1c0
@@ -4409,6 +4511,7 @@ ffff38c4:	9100c3ff 	add	sp, sp, #0x30
 ffff38c8:	d65f03c0 	ret
 
 ; subroutine -- big
+; one call, we spin calling this.
 
 ffff38cc:	d10203ff 	sub	sp, sp, #0x80
 ffff38d0:	a9077bfd 	stp	x29, x30, [sp, #112]
@@ -4418,8 +4521,12 @@ ffff38dc:	a9056bf9 	stp	x25, x26, [sp, #80]
 ffff38e0:	a90463f7 	stp	x23, x24, [sp, #64]
 ffff38e4:	a9035bf5 	stp	x21, x22, [sp, #48]
 ffff38e8:	a90253f3 	stp	x19, x20, [sp, #32]
+
+; This fetches a pointer to the "usb" block
+; this is the only routine that does so.
 ffff38ec:	b0ffc660 	adrp	x0, 0xff8c0000		; SRAM
 ffff38f0:	910dc013 	add	x19, x0, #0x370
+
 ffff38f4:	f9402660 	ldr	x0, [x19, #0x48]
 ffff38f8:	b9430c00 	ldr	w0, [x0, #0x30c]
 ffff38fc:	121e3400 	and	w0, w0, #0xfffc
@@ -4453,7 +4560,7 @@ ffff3964:	b0ffc661 	adrp	x1, 0xff8c0000
 ffff3968:	91080021 	add	x1, x1, #0x200
 ffff396c:	52804002 	mov	w2, #0x200                 	// #512
 ffff3970:	79000822 	strh	w2, [x1, #4]
-ffff3974:	b9460401 	ldr	w1, [x0, #0x604]
+ffff3974:	b9460401 	ldr	w1, [x0, #0x604]	; USB dctrl
 ffff3978:	12036821 	and	w1, w1, #0xe0ffffff
 ffff397c:	14000058 	b	0xffff3adc
 ffff3980:	f9420aa0 	ldr	x0, [x21, #0x410]
@@ -4481,9 +4588,9 @@ ffff39d0:	540003a0 	b.eq	0xffff3a44  // b.none
 ffff39d4:	7100041f 	cmp	w0, #0x1
 ffff39d8:	54000541 	b.ne	0xffff3a80  // b.any
 ffff39dc:	f9402660 	ldr	x0, [x19, #0x48]
-ffff39e0:	b9460401 	ldr	w1, [x0, #0x604]
+ffff39e0:	b9460401 	ldr	w1, [x0, #0x604]	; USB dctrl
 ffff39e4:	121b6c21 	and	w1, w1, #0xffffffe1
-ffff39e8:	b9060401 	str	w1, [x0, #0x604]
+ffff39e8:	b9060401 	str	w1, [x0, #0x604]	; USB dctrl
 ffff39ec:	f9402260 	ldr	x0, [x19, #0x40]
 ffff39f0:	b4000180 	cbz	x0, 0xffff3a20
 ffff39f4:	b9401801 	ldr	w1, [x0, #24]
@@ -4538,12 +4645,12 @@ ffff3a7c:	14000010 	b	0xffff3abc
 ; branched to from above
 ffff3a80:	350003e0 	cbnz	w0, 0xffff3afc
 ffff3a84:	f9402660 	ldr	x0, [x19, #0x48]
-ffff3a88:	b9460401 	ldr	w1, [x0, #0x604]
+ffff3a88:	b9460401 	ldr	w1, [x0, #0x604]	; USB dctrl
 ffff3a8c:	12157822 	and	w2, w1, #0xfffffbff
-ffff3a90:	b9060402 	str	w2, [x0, #0x604]
+ffff3a90:	b9060402 	str	w2, [x0, #0x604]	; USB dctrl
 ffff3a94:	f9402660 	ldr	x0, [x19, #0x48]
 ffff3a98:	0a1b0021 	and	w1, w1, w27
-ffff3a9c:	b9060401 	str	w1, [x0, #0x604]
+ffff3a9c:	b9060401 	str	w1, [x0, #0x604]	; USB dctrl
 ffff3aa0:	39419660 	ldrb	w0, [x19, #0x65]
 ffff3aa4:	0a190000 	and	w0, w0, w25
 ffff3aa8:	39019660 	strb	w0, [x19, #0x65]
@@ -4559,9 +4666,9 @@ ffff3ac4:	b9460001 	ldr	w1, [x0, #0x600]
 ffff3ac8:	320a0021 	orr	w1, w1, #0x400000
 ffff3acc:	b9060001 	str	w1, [x0, #0x600]
 ffff3ad0:	f9402660 	ldr	x0, [x19, #0x48]
-ffff3ad4:	b9460401 	ldr	w1, [x0, #0x604]
+ffff3ad4:	b9460401 	ldr	w1, [x0, #0x604]	; USB dctrl
 ffff3ad8:	0a180021 	and	w1, w1, w24
-ffff3adc:	b9060401 	str	w1, [x0, #0x604]
+ffff3adc:	b9060401 	str	w1, [x0, #0x604]	; USB dctrl
 ffff3ae0:	f9401e60 	ldr	x0, [x19, #0x38]
 ffff3ae4:	52800021 	mov	w1, #0x1                   	// #1
 ffff3ae8:	97fffedb 	bl	0xffff3654
@@ -4720,30 +4827,42 @@ ffff3d38:	a9427bfd 	ldp	x29, x30, [sp, #32]
 ffff3d3c:	9100c3ff 	add	sp, sp, #0x30
 ffff3d40:	d65f03c0 	ret
 
+; =================================
+; subroutine "usb_spin"
+
 ffff3d44:	d10043ff 	sub	sp, sp, #0x10
 ffff3d48:	a9007bfd 	stp	x29, x30, [sp]
 ffff3d4c:	910003fd 	mov	x29, sp
-ffff3d50:	b0ffc660 	adrp	x0, 0xff8c0000
-ffff3d54:	b900301f 	str	wzr, [x0, #0x30]
-ffff3d58:	97fff389 	bl	0xffff0b7c		; CRU, cpu clocks
-ffff3d5c:	97fffa97 	bl	0xffff27b8
 
-ffff3d60:	97fffedb 	bl	0xffff38cc
+ffff3d50:	b0ffc660 	adrp	x0, 0xff8c0000
+ffff3d54:	b900301f 	str	wzr, [x0, #0x30]	; SRAM + 0x30
+
+ffff3d58:	97fff389 	bl	0xffff0b7c		; CRU, cpu clocks
+ffff3d5c:	97fffa97 	bl	0xffff27b8		; usb_init ()
+
+ffff3d60:	97fffedb 	bl	0xffff38cc		; spin calling this
 ffff3d64:	17ffffff 	b	0xffff3d60
 
-; Called from an interesting spot above
+; =============================================
+; subroutine
+; Called from an interesting spot above that
+;  seems to have no path to it.
+;  If that is true, this will never get called.
+
 ffff3d68:	d10043ff 	sub	sp, sp, #0x10
 ffff3d6c:	a9007bfd 	stp	x29, x30, [sp]
 ffff3d70:	910003fd 	mov	x29, sp
+
 ffff3d74:	b0ffc660 	adrp	x0, 0xff8c0000
 ffff3d78:	b9000c1f 	str	wzr, [x0, #12]
 ffff3d7c:	97fff1a3 	bl	0xffff0408
-ffff3d80:	97fffff1 	bl	0xffff3d44
+ffff3d80:	97fffff1 	bl	0xffff3d44		; usb_spin
 ffff3d84:	aa0003e2 	mov	x2, x0
 ffff3d88:	529fffe0 	mov	w0, #0xffff                	// #65535
 ffff3d8c:	34000241 	cbz	w1, 0xffff3dd4
 ffff3d90:	52820423 	mov	w3, #0x1021                	// #4129
 ffff3d94:	52900004 	mov	w4, #0x8000                	// #32768
+
 ffff3d98:	39400045 	ldrb	w5, [x2]
 ffff3d9c:	52801006 	mov	w6, #0x80                  	// #128
 ffff3da0:	321f3fe7 	mov	w7, #0x1fffe               	// #131070
@@ -4761,20 +4880,27 @@ ffff3dcc:	91000442 	add	x2, x2, #0x1
 ffff3dd0:	35fffe41 	cbnz	w1, 0xffff3d98
 ffff3dd4:	d65f03c0 	ret
 
+; subroutine
+; Called from several places
+; w1 is a count (typically 0x200)
+; x0 is some address
 ffff3dd8:	aa1f03e3 	mov	x3, xzr
 ffff3ddc:	b0000002 	adrp	x2, 0xffff4000
-ffff3de0:	9131a044 	add	x4, x2, #0xc68
+ffff3de0:	9131a044 	add	x4, x2, #0xc68		; ffff4c68: 00000000 62987d7a
+
 ffff3de4:	f9400085 	ldr	x5, [x4]
 ffff3de8:	b0ffc662 	adrp	x2, 0xff8c0000
-ffff3dec:	9101f042 	add	x2, x2, #0x7c
+ffff3dec:	9101f042 	add	x2, x2, #0x7c		; SRAM + 0x7c
 ffff3df0:	b8236845 	str	w5, [x2, x3]
 ffff3df4:	91002084 	add	x4, x4, #0x8
 ffff3df8:	91001063 	add	x3, x3, #0x4
 ffff3dfc:	f104007f 	cmp	x3, #0x100
-ffff3e00:	54ffff21 	b.ne	0xffff3de4  // b.any
+ffff3e00:	54ffff21 	b.ne	0xffff3de4
+
 ffff3e04:	340002a1 	cbz	w1, 0xffff3e58
 ffff3e08:	2a1f03e3 	mov	w3, wzr
 ffff3e0c:	2a1f03e4 	mov	w4, wzr
+
 ffff3e10:	11000463 	add	w3, w3, #0x1
 ffff3e14:	12001c63 	and	w3, w3, #0xff
 ffff3e18:	38634845 	ldrb	w5, [x2, w3, uxtw]
@@ -5189,7 +5315,7 @@ ffff4360:	97fff207 	bl	0xffff0b7c		; CRU, cpu clocks
 ffff4364:	90ffc660 	adrp	x0, 0xff8c0000
 ffff4368:	b900101f 	str	wzr, [x0, #16]		; SRAM[4] = 0
 ffff436c:	97fff900 	bl	0xffff276c
-ffff4370:	97fffe75 	bl	0xffff3d44
+ffff4370:	97fffe75 	bl	0xffff3d44		; usb_spin
 
 ffff4374:	14000000 	b	0xffff4374		; spin
 
