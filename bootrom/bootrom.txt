@@ -291,6 +291,14 @@
 ;  add     x6, x0, x1, uxtx #4
 ; These are all already 64 bit registers, so I don't see the point,
 ;  but I am going to pass this by for now.
+;
+; ubfx is a "bitfield extract" instruction
+;	ubfx	w1, w0, #6, #4
+;  the above extracts from w0 to w1
+;  6 is the starting bit, 4 is the number of bits
+;  this is a nice way to replace the usual mask and shift
+;  In C code, this would be:
+;	dest = (src >> lsb) & ((1 << width) - 1);
 
 ; ==========================================================================
 ; ==========================================================================
@@ -3378,6 +3386,18 @@ ffff27fc:	52800060 	mov	w0, #0x3
 ffff2800:	b9005660 	str	w0, [x19, #0x54]	; usb_54 = 3
 ffff2804:	b900627f 	str	wzr, [x19, #0x60]	; usb_60 = 0
 ffff2808:	d0ffc661 	adrp	x1, 0xff8c0000
+
+; now another small block "A"
+;
+;	A + 0 = B
+;	A = 8 = 0x100 (size of B)
+;	A + 16 = 0
+;	A + 24 = B
+;	A + 32 = "usb"
+;
+; We don't save any pointers to B anywhere, we just "know"
+; it is at SRAM + 0x410
+
 ffff280c:	91104034 	add	x20, x1, #0x410		; SRAM + 0x410
 ffff2810:	f9000a9f 	str	xzr, [x20, #16]
 ffff2814:	f900069f 	str	xzr, [x20, #8]
@@ -3385,8 +3405,13 @@ ffff2818:	f902083f 	str	xzr, [x1, #0x410]
 ffff281c:	52800020 	mov	w0, #0x1
 ffff2820:	b9005260 	str	w0, [x19, #0x50]	; usb_50 = 1
 ffff2824:	f9001293 	str	x19, [x20, #32]
+
 ffff2828:	52802000 	mov	w0, #0x100
-ffff282c:	b9000a80 	str	w0, [x20, #8]
+ffff282c:	b9000a80 	str	w0, [x20, #8]		; size of B, which follows
+
+; and a big area "B" (this is the USB event buffer)
+; 0x100 bytes in size.
+; we save 2 pointers to it in "A" above
 
 ffff2830:	d0ffc660 	adrp	x0, 0xff8c0000
 ffff2834:	91084000 	add	x0, x0, #0x210		; SRAM + 0x210
@@ -3525,20 +3550,23 @@ ffff2960:	b9000e9f 	str	wzr, [x20, #12]
 ; 0xc404 is event buffer addr, high 32 bits
 ; 0xc408 is event buffer size in bytes
 ; 0xc40c is event buffer count in bytes
+
+; We copy the address of block "B" above,
+; which is apparently the event buffer, of size 0x100
 ffff2964:	f9402660 	ldr	x0, [x19, #0x48]
-ffff2968:	f9400e81 	ldr	x1, [x20, #24]		; from usb+0x24
+ffff2968:	f9400e81 	ldr	x1, [x20, #24]		; from A+24
 ffff296c:	b9030001 	str	w1, [x0, #0x300]
 
 ffff2970:	f9402660 	ldr	x0, [x19, #0x48]
-ffff2974:	b9401e81 	ldr	w1, [x20, #28]
+ffff2974:	b9401e81 	ldr	w1, [x20, #28]		; A+28
 ffff2978:	b9030401 	str	w1, [x0, #0x304]
 
 ffff297c:	f9402660 	ldr	x0, [x19, #0x48]
-ffff2980:	79401281 	ldrh	w1, [x20, #8]
+ffff2980:	79401281 	ldrh	w1, [x20, #8]		; size (initially 0x100)
 ffff2984:	b9030801 	str	w1, [x0, #0x308]
 
 ffff2988:	f9402660 	ldr	x0, [x19, #0x48]
-ffff298c:	b9030c1f 	str	wzr, [x0, #0x30c]
+ffff298c:	b9030c1f 	str	wzr, [x0, #0x30c]	; count = 0
 
 ; 0xc110 is global core control
 ; set port capability direction
@@ -3655,28 +3683,52 @@ ffff2b20:	9100c3ff 	add	sp, sp, #0x30
 ffff2b24:	d65f03c0 	ret
 
 ;  ======================================
-; subroutine (big) one call
+; subroutine -- usb_dingus ( "usb", buf )
+;  passed the pointer to "usb" in x0
+;  another pointer in x1, we call this "buf"
+;  only one call, from usb_run ()
+;
+; ubfx is "bitfield extract"
+;	ubfx	w1, w0, #6, #4
+;  the above extracts from w0 to w1
+;  6 is the starting bit, 4 is the number of bits
+;  this is a nice way to replace the usual mask and shift
+;  In C code, this would be:
+;	dest = (src >> lsb) & ((1 << width) - 1);
+
 ffff2b28:	d10143ff 	sub	sp, sp, #0x50
 ffff2b2c:	a9047bfd 	stp	x29, x30, [sp, #64]
 ffff2b30:	910103fd 	add	x29, sp, #0x40
 ffff2b34:	a9035ff6 	stp	x22, x23, [sp, #48]
 ffff2b38:	a90257f4 	stp	x20, x21, [sp, #32]
 ffff2b3c:	f9000ff3 	str	x19, [sp, #24]
+
+; get pointer to "buf"
 ffff2b40:	aa0103f4 	mov	x20, x1
+
+; get a 4 byte item from buf that may be badly aligned
+; then extract bits 9:6
 ffff2b44:	39400e81 	ldrb	w1, [x20, #3]
 ffff2b48:	39400a82 	ldrb	w2, [x20, #2]
 ffff2b4c:	39400683 	ldrb	w3, [x20, #1]
 ffff2b50:	39400284 	ldrb	w4, [x20]
-ffff2b54:	aa0003f3 	mov	x19, x0
+
+ffff2b54:	aa0003f3 	mov	x19, x0			; save x0
 ffff2b58:	2a012040 	orr	w0, w2, w1, lsl #8
 ffff2b5c:	2a032081 	orr	w1, w4, w3, lsl #8
 ffff2b60:	2a004020 	orr	w0, w1, w0, lsl #16
 ffff2b64:	53062401 	ubfx	w1, w0, #6, #4
+
 ffff2b68:	71000c3f 	cmp	w1, #0x3
 ffff2b6c:	54000921 	b.ne	0xffff2c90
+
 ffff2b70:	39419661 	ldrb	w1, [x19, #0x65]
 ffff2b74:	321d0020 	orr	w0, w1, #0x8
 ffff2b78:	39019660 	strb	w0, [x19, #0x65]
+
+; 4 byte item, possibly badly aligned
+; the same 4 bytes as above (too bad we didn't save it)
+; extract bits 15:12
 ffff2b7c:	39400e82 	ldrb	w2, [x20, #3]
 ffff2b80:	39400a83 	ldrb	w3, [x20, #2]
 ffff2b84:	39400684 	ldrb	w4, [x20, #1]
@@ -3685,8 +3737,10 @@ ffff2b8c:	2a022062 	orr	w2, w3, w2, lsl #8
 ffff2b90:	2a0420a3 	orr	w3, w5, w4, lsl #8
 ffff2b94:	2a024062 	orr	w2, w3, w2, lsl #16
 ffff2b98:	530c3c43 	ubfx	w3, w2, #12, #4
+
 ffff2b9c:	7100087f 	cmp	w3, #0x2
 ffff2ba0:	54000ee1 	b.ne	0xffff2d7c  // b.any
+
 ffff2ba4:	b9405a61 	ldr	w1, [x19, #0x58]
 ffff2ba8:	71000c3f 	cmp	w1, #0x3
 ffff2bac:	54002981 	b.ne	0xffff30dc		return if ne 3
@@ -3716,11 +3770,11 @@ ffff2c08:	f9402660 	ldr	x0, [x19, #0x48]
 ffff2c0c:	b9430c00 	ldr	w0, [x0, #0x30c]
 ffff2c10:	121e3400 	and	w0, w0, #0xfffc
 ffff2c14:	d0ffc661 	adrp	x1, 0xff8c0000
-ffff2c18:	91104021 	add	x1, x1, #0x410
+ffff2c18:	91104021 	add	x1, x1, #0x410		; usb block A * XXXXX
 ffff2c1c:	b9001020 	str	w0, [x1, #16]
 ffff2c20:	340000e0 	cbz	w0, 0xffff2c3c
 ffff2c24:	f9402661 	ldr	x1, [x19, #0x48]
-ffff2c28:	52800082 	mov	w2, #0x4                   	// #4
+ffff2c28:	52800082 	mov	w2, #0x4
 ffff2c2c:	51001000 	sub	w0, w0, #0x4
 ffff2c30:	b9030c22 	str	w2, [x1, #0x30c]
 ffff2c34:	7100001f 	cmp	w0, #0x0
@@ -3747,6 +3801,7 @@ ffff2c84:	aa1403e1 	mov	x1, x20
 ffff2c88:	9400011b 	bl	0xffff30f4
 ffff2c8c:	14000114 	b	0xffff30dc		; return
 
+; still going ...
 ffff2c90:	7100043f 	cmp	w1, #0x1
 ffff2c94:	54002241 	b.ne	0xffff30dc  // b.any
 ffff2c98:	53011400 	ubfx	w0, w0, #1, #5
@@ -4630,6 +4685,9 @@ ffff38c8:	d65f03c0 	ret
 ; one call, surrounded by a spin loop, i.e. once we decide that
 ; we are doing the usb bootloader thing, we run this forever
 ; we get no arguments
+;
+; This must be hand coded, no compiler would have generated this.
+; It has some classic tangled "spaghetti code"
 
 ffff38cc:	d10203ff 	sub	sp, sp, #0x80
 ffff38d0:	a9077bfd 	stp	x29, x30, [sp, #112]
@@ -4701,21 +4759,23 @@ ffff3978:	12036821 	and	w1, w1, #0xe0ffffff
 ffff397c:	14000058 	b	0xffff3adc
 
 ; branches here from 2 places
-ffff3980:	f9420aa0 	ldr	x0, [x21, #0x410]
-ffff3984:	b9400e81 	ldr	w1, [x20, #12]
+ffff3980:	f9420aa0 	ldr	x0, [x21, #0x410]	; area "A"
+ffff3984:	b9400e81 	ldr	w1, [x20, #12]		; "A" + 12
 ffff3988:	b8616800 	ldr	w0, [x0, x1]
-ffff398c:	b9000be0 	str	w0, [sp, #8]
+ffff398c:	b9000be0 	str	w0, [sp, #8]		; tmp
 ffff3990:	37000180 	tbnz	w0, #0, 0xffff39c0
+
 ffff3994:	53011400 	ubfx	w0, w0, #1, #5
 ffff3998:	8b204e61 	add	x1, x19, w0, uxtw #3
 ffff399c:	f9401c21 	ldr	x1, [x1, #0x38]
 ffff39a0:	b9401821 	ldr	w1, [x1, #24]
 ffff39a4:	36000ac1 	tbz	w1, #0, 0xffff3afc
 ffff39a8:	7100041f 	cmp	w0, #0x1
-ffff39ac:	54000a88 	b.hi	0xffff3afc  // b.pmore
+ffff39ac:	54000a88 	b.hi	0xffff3afc
 ffff39b0:	910023e1 	add	x1, sp, #0x8
 ffff39b4:	aa1303e0 	mov	x0, x19
-ffff39b8:	97fffc5c 	bl	0xffff2b28
+
+ffff39b8:	97fffc5c 	bl	0xffff2b28		; usb_dingus()
 ffff39bc:	14000050 	b	0xffff3afc
 
 ; branch from above
@@ -4723,7 +4783,7 @@ ffff39c0:	121f1801 	and	w1, w0, #0xfe
 ffff39c4:	350009c1 	cbnz	w1, 0xffff3afc
 ffff39c8:	53082c00 	ubfx	w0, w0, #8, #4
 ffff39cc:	7100081f 	cmp	w0, #0x2
-ffff39d0:	540003a0 	b.eq	0xffff3a44  // b.none
+ffff39d0:	540003a0 	b.eq	0xffff3a44
 ffff39d4:	7100041f 	cmp	w0, #0x1
 ffff39d8:	54000541 	b.ne	0xffff3a80	; below
 
@@ -4848,7 +4908,9 @@ ffff3b0c:	b9000e80 	str	w0, [x20, #12]
 ffff3b10:	510012d6 	sub	w22, w22, #0x4
 ffff3b14:	b9030c37 	str	w23, [x1, #0x30c]
 ffff3b18:	710002df 	cmp	w22, #0x0
-ffff3b1c:	54fff32c 	b.gt	0xffff3980
+ffff3b1c:	54fff32c 	b.gt	0xffff3980		; back up we go
+
+; we are done, wrap up
 ffff3b20:	b9401680 	ldr	w0, [x20, #20]
 ffff3b24:	f9402661 	ldr	x1, [x19, #0x48]
 ffff3b28:	b900129f 	str	wzr, [x20, #16]
