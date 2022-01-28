@@ -4372,18 +4372,20 @@ ffff3574:	d10083ff 	sub	sp, sp, #0x20
 ffff3578:	a9017bfd 	stp	x29, x30, [sp, #16]
 ffff357c:	910043fd 	add	x29, sp, #0x10
 ffff3580:	f90007f3 	str	x19, [sp, #8]
-ffff3584:	aa0003f3 	mov	x19, x0
+
+ffff3584:	aa0003f3 	mov	x19, x0			; usb struct pointer
 ffff3588:	b0ffc660 	adrp	x0, 0xff8c0000
-ffff358c:	528000e1 	mov	w1, #0x7                   	// #7
+ffff358c:	528000e1 	mov	w1, #0x7
 ffff3590:	39080001 	strb	w1, [x0, #0x200]
 ffff3594:	91080000 	add	x0, x0, #0x200
-ffff3598:	528000a1 	mov	w1, #0x5                   	// #5
+ffff3598:	528000a1 	mov	w1, #0x5
 ffff359c:	39000401 	strb	w1, [x0, #1]
 ffff35a0:	3900081f 	strb	wzr, [x0, #2]
 ffff35a4:	39000c1f 	strb	wzr, [x0, #3]
-ffff35a8:	52800801 	mov	w1, #0x40                  	// #64
+ffff35a8:	52800801 	mov	w1, #0x40
 ffff35ac:	79000801 	strh	w1, [x0, #4]
-ffff35b0:	f9402660 	ldr	x0, [x19, #0x48]
+
+ffff35b0:	f9402660 	ldr	x0, [x19, #0x48]	; usb hw
 ffff35b4:	b9460000 	ldr	w0, [x0, #0x600]
 ffff35b8:	b9405661 	ldr	w1, [x19, #0x54]
 ffff35bc:	121d7000 	and	w0, w0, #0xfffffff8
@@ -4398,10 +4400,10 @@ ffff35dc:	54000061 	b.ne	0xffff35e8  // b.any
 ffff35e0:	321f0000 	orr	w0, w0, #0x2
 ffff35e4:	14000002 	b	0xffff35ec
 ffff35e8:	321e0000 	orr	w0, w0, #0x4
-ffff35ec:	f9402661 	ldr	x1, [x19, #0x48]
+ffff35ec:	f9402661 	ldr	x1, [x19, #0x48]	; usb hw
 ffff35f0:	b9060020 	str	w0, [x1, #0x600]
 ffff35f4:	39419660 	ldrb	w0, [x19, #0x65]
-ffff35f8:	52801de1 	mov	w1, #0xef                  	// #239
+ffff35f8:	52801de1 	mov	w1, #0xef
 ffff35fc:	0a010000 	and	w0, w0, w1
 ffff3600:	39019660 	strb	w0, [x19, #0x65]
 
@@ -4417,10 +4419,11 @@ ffff3624:	52800020 	mov	w0, #0x1
 ffff3628:	b9005e60 	str	w0, [x19, #0x5c]
 ffff362c:	aa1303e0 	mov	x0, x19
 ffff3630:	97fffce9 	bl	0xffff29d4		; call odd piece above
-ffff3634:	f9402661 	ldr	x1, [x19, #0x48]
+ffff3634:	f9402661 	ldr	x1, [x19, #0x48]	; usb hw
 ffff3638:	2a1f03e0 	mov	w0, wzr
-ffff363c:	5283c3e2 	mov	w2, #0x1e1f                	// #7711
+ffff363c:	5283c3e2 	mov	w2, #0x1e1f
 ffff3640:	b9060822 	str	w2, [x1, #0x608]
+
 ffff3644:	f94007f3 	ldr	x19, [sp, #8]
 ffff3648:	a9417bfd 	ldp	x29, x30, [sp, #16]
 ffff364c:	910083ff 	add	sp, sp, #0x20
@@ -4435,6 +4438,8 @@ ffff3650:	d65f03c0 	ret
 ;
 ; note that x0 is NOT a pointer to the
 ;  USB block as in the above.
+; "x" = usb + 0x38
+; "y" = usb + 0x40
 
 ffff3654:	d10183ff 	sub	sp, sp, #0x60
 ffff3658:	a9057bfd 	stp	x29, x30, [sp, #80]
@@ -4544,6 +4549,7 @@ ffff37ec:	d65f03c0 	ret
 ; usb_init1 ( usb )
 ; subroutine, called once during usb initialization
 ; passed x0 as pointer to usb control structure in SRAM
+; this seems to mostly set up memory.
 
 ffff37f0:	d100c3ff 	sub	sp, sp, #0x30
 ffff37f4:	a9027bfd 	stp	x29, x30, [sp, #32]
@@ -4551,51 +4557,65 @@ ffff37f8:	910083fd 	add	x29, sp, #0x20
 ffff37fc:	a90157f4 	stp	x20, x21, [sp, #16]
 ffff3800:	f90007f3 	str	x19, [sp, #8]
 
-ffff3804:	aa0003f3 	mov	x19, x0
+ffff3804:	aa0003f3 	mov	x19, x0			; usb block base
+
 ffff3808:	b0ffc660 	adrp	x0, 0xff8c0000
-ffff380c:	91070000 	add	x0, x0, #0x1c0
+ffff380c:	91070000 	add	x0, x0, #0x1c0		; SRAM + 0x1c0
 ffff3810:	f9000260 	str	x0, [x19]
 ffff3814:	f9000e60 	str	x0, [x19, #24]
-ffff3818:	d2800802 	mov	x2, #0x40                  	// #64
+ffff3818:	d2800802 	mov	x2, #0x40
 ffff381c:	aa1f03e1 	mov	x1, xzr
-ffff3820:	94000317 	bl	0xffff447c		; memset
+ffff3820:	94000317 	bl	0xffff447c		; memset ( addr, 0, 0x40 )
+
 ffff3824:	b0ffc660 	adrp	x0, 0xff8c0000
-ffff3828:	910fc001 	add	x1, x0, #0x3f0
+ffff3828:	910fc001 	add	x1, x0, #0x3f0		; SRAM + 0x3f0
 ffff382c:	f9000661 	str	x1, [x19, #8]
 ffff3830:	f9001261 	str	x1, [x19, #32]
 ffff3834:	f9000c3f 	str	xzr, [x1, #24]
 ffff3838:	f900083f 	str	xzr, [x1, #16]
 ffff383c:	f900043f 	str	xzr, [x1, #8]
 ffff3840:	f901f81f 	str	xzr, [x0, #0x3f0]
+
 ffff3844:	b0ffc660 	adrp	x0, 0xff8c0000
-ffff3848:	91060000 	add	x0, x0, #0x180
+ffff3848:	91060000 	add	x0, x0, #0x180		; SRAM + 0x180
 ffff384c:	f9000a60 	str	x0, [x19, #16]
 ffff3850:	f9001660 	str	x0, [x19, #0x28]
-ffff3854:	d2800802 	mov	x2, #0x40                  	// #64
+ffff3854:	d2800802 	mov	x2, #0x40
 ffff3858:	aa1f03e1 	mov	x1, xzr
-ffff385c:	94000308 	bl	0xffff447c		; memset
+ffff385c:	94000308 	bl	0xffff447c		; memset ( addr, 0, 0x40 );
+
+; setup block X (pointer at usb + 0x38)
+;  40 bytes in size i.e. 0x28
 ffff3860:	b0ffc660 	adrp	x0, 0xff8c0000
-ffff3864:	910c6014 	add	x20, x0, #0x318
-ffff3868:	d2800502 	mov	x2, #0x28                  	// #40
+ffff3864:	910c6014 	add	x20, x0, #0x318		; SRAM + 0x318
+ffff3868:	d2800502 	mov	x2, #0x28		; 40
 ffff386c:	aa1403e0 	mov	x0, x20
 ffff3870:	aa1f03e1 	mov	x1, xzr
-ffff3874:	94000302 	bl	0xffff447c		; memset
+ffff3874:	94000302 	bl	0xffff447c		; memset ( x20, 0, 0x28 )
 ffff3878:	f9000693 	str	x19, [x20, #8]
 ffff387c:	3900829f 	strb	wzr, [x20, #32]
 ffff3880:	39008e9f 	strb	wzr, [x20, #0x23]
 ffff3884:	b9001a9f 	str	wzr, [x20, #24]
-ffff3888:	f9001e74 	str	x20, [x19, #0x38]
+ffff3888:	f9001e74 	str	x20, [x19, #0x38]	; pointer to X
+
+; setup block Y (pointer at usb + 0x40)
+; Note that this immediately follows X,
+; we just add 0x28 (40) to the X base value
+;  also 40 bytes in size i.e. 0x28
+; Oddly, just as above, this initializes stuff in the block,
+;  but via offsets from the pointer to the X block
 ffff388c:	9100a295 	add	x21, x20, #0x28
-ffff3890:	d2800502 	mov	x2, #0x28                  	// #40
+ffff3890:	d2800502 	mov	x2, #0x28		; 40
 ffff3894:	aa1503e0 	mov	x0, x21
 ffff3898:	aa1f03e1 	mov	x1, xzr
-ffff389c:	940002f8 	bl	0xffff447c		; memset
+ffff389c:	940002f8 	bl	0xffff447c		; memset ( x21, 0, 0x28 )
 ffff38a0:	f9001a93 	str	x19, [x20, #0x30]
-ffff38a4:	52800020 	mov	w0, #0x1                   	// #1
+ffff38a4:	52800020 	mov	w0, #0x1
 ffff38a8:	39012280 	strb	w0, [x20, #0x48]
 ffff38ac:	39012e80 	strb	w0, [x20, #0x4b]
 ffff38b0:	b900429f 	str	wzr, [x20, #0x40]
-ffff38b4:	f9002275 	str	x21, [x19, #0x40]
+ffff38b4:	f9002275 	str	x21, [x19, #0x40]	; pointer to Y
+
 ffff38b8:	f94007f3 	ldr	x19, [sp, #8]
 ffff38bc:	a94157f4 	ldp	x20, x21, [sp, #16]
 ffff38c0:	a9427bfd 	ldp	x29, x30, [sp, #32]
@@ -4877,6 +4897,7 @@ ffff3bc0:	a9427bfd 	ldp	x29, x30, [sp, #32]
 ffff3bc4:	9100c3ff 	add	sp, sp, #0x30
 ffff3bc8:	d65f03c0 	ret
 
+; subroutine - 1 call
 ffff3bcc:	d100c3ff 	sub	sp, sp, #0x30
 ffff3bd0:	a9027bfd 	stp	x29, x30, [sp, #32]
 ffff3bd4:	910083fd 	add	x29, sp, #0x20
