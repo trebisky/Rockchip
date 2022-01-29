@@ -3103,6 +3103,8 @@ ffff2498:	a9417bfd 	ldp	x29, x30, [sp, #16]
 ffff249c:	910083ff 	add	sp, sp, #0x20
 ffff24a0:	d65f03c0 	ret
 
+;  ===============================================
+
 ; subroutine -- "try_abc ( table_entry )"
 ; called in the midst of the "try four" loop
 ; passed a pointer to a table entry in x0
@@ -3153,7 +3155,7 @@ ffff2518:	6b21401f 	cmp	w0, w1, uxtw
 ffff251c:	54001101 	b.ne	0xffff273c  // b.any
 ffff2520:	52804001 	mov	w1, #0x200                 	// #512
 ffff2524:	aa1503e0 	mov	x0, x21
-ffff2528:	9400062c 	bl	0xffff3dd8
+ffff2528:	9400062c 	bl	0xffff3dd8		; uncrypt ( x21, 0x200 )
 ffff252c:	b9401fe0 	ldr	w0, [sp, #28]
 ffff2530:	79c3faa2 	ldrsh	w2, [x21, #0x1fc]
 ffff2534:	79401aa1 	ldrh	w1, [x21, #12]
@@ -3205,18 +3207,22 @@ ffff25e8:	aa1803e1 	mov	x1, x24
 ffff25ec:	d63f0060 	blr	x3
 ffff25f0:	35000a60 	cbnz	w0, 0xffff273c
 ffff25f4:	350001b9 	cbnz	w25, 0xffff2628
-ffff25f8:	52804001 	mov	w1, #0x200                 	// #512
+
+; do something to four 512 byte sections
+; so x24 must point to 2048 bytes of stuff
+ffff25f8:	52804001 	mov	w1, #0x200
 ffff25fc:	aa1803e0 	mov	x0, x24
-ffff2600:	940005f6 	bl	0xffff3dd8
+ffff2600:	940005f6 	bl	0xffff3dd8		; uncrypt ( x24, 0x200 )
 ffff2604:	91080300 	add	x0, x24, #0x200
-ffff2608:	52804001 	mov	w1, #0x200                 	// #512
-ffff260c:	940005f3 	bl	0xffff3dd8
+ffff2608:	52804001 	mov	w1, #0x200
+ffff260c:	940005f3 	bl	0xffff3dd8		; uncrypt ( x24+0x200, 0x200 )
 ffff2610:	91100300 	add	x0, x24, #0x400
-ffff2614:	52804001 	mov	w1, #0x200                 	// #512
-ffff2618:	940005f0 	bl	0xffff3dd8
+ffff2614:	52804001 	mov	w1, #0x200
+ffff2618:	940005f0 	bl	0xffff3dd8		; uncrypt ( x24+0x400, 0x200 )
 ffff261c:	91180300 	add	x0, x24, #0x600
-ffff2620:	52804001 	mov	w1, #0x200                 	// #512
-ffff2624:	940005ed 	bl	0xffff3dd8
+ffff2620:	52804001 	mov	w1, #0x200
+ffff2624:	940005ed 	bl	0xffff3dd8		; uncrypt ( x24+0x600, 0x200 )
+
 ffff2628:	b9400ee0 	ldr	w0, [x23, #12]
 ffff262c:	3500015c 	cbnz	w28, 0xffff2654
 ffff2630:	35000560 	cbnz	w0, 0xffff26dc
@@ -3284,8 +3290,11 @@ ffff2724:	91009000 	add	x0, x0, #0x24
 ffff2728:	97fff7a4 	bl	0xffff05b8		; crypto4
 ffff272c:	35000080 	cbnz	w0, 0xffff273c
 ffff2730:	97fff6b0 	bl	0xffff01f0
+
+; I can't see how this would be good (jumping to address 0)
 ffff2734:	aa1f03e0 	mov	x0, xzr
 ffff2738:	940007d8 	bl	0xffff4698		; Go to x0 !?
+
 ffff273c:	b9401a60 	ldr	w0, [x19, #24]
 ffff2740:	11000694 	add	w20, w20, #0x1
 ffff2744:	6b20429f 	cmp	w20, w0, uxtw
@@ -3300,10 +3309,12 @@ ffff2760:	a9477bfd 	ldp	x29, x30, [sp, #112]
 ffff2764:	910203ff 	add	sp, sp, #0x80
 ffff2768:	d65f03c0 	ret
 
+; END of try_abc ()
+
 ; =============================
-; subroutine
-;  one call during initialization right before
-;  we dive into usb_spin forever.
+; subroutine - try_four ()
+;  one call during initialization.
+;  if this doesn't work, we dive into usb_spin forever.
 
 ffff276c:	d10083ff 	sub	sp, sp, #0x20
 ffff2770:	a9017bfd 	stp	x29, x30, [sp, #16]
@@ -3351,10 +3362,16 @@ ffff27b4:	d65f03c0 	ret
 ;	ffff4c00: 00000005 00000005
 
 ; =================================================================
+; =================================================================
+;
+;     USB stuff follows
+;
+; =================================================================
+; =================================================================
 
 ; subroutine -  "usb_init"
 ;
-; fe80xxxx is USB_OTG0
+; fe80xxxx is USB_OTG0 hardare
 
 ffff27b8:	d10083ff 	sub	sp, sp, #0x20
 ffff27bc:	a9017bfd 	stp	x29, x30, [sp, #16]
@@ -3367,8 +3384,10 @@ ffff27cc:	b9412400 	ldr	w0, [x0, #0x124]	; ffff5124: ff33e014
 ffff27d0:	52a60001 	mov	w1, #0x30000000
 ffff27d4:	b9000001 	str	w1, [x0]
 
-; x19 is the base of an area in SRAM this uses
-;  at ff8c0370, let's call it "usb"
+; set up what we call "usb"
+; this is an area 128 bytes in size at SRAM + 0x370
+; the base is commonly (but not always) held in x19
+; throughout this usb software
 ffff27d8:	d0ffc660 	adrp	x0, 0xff8c0000
 ffff27dc:	910dc013 	add	x19, x0, #0x370		; SRAM + 0x370
 
@@ -3385,26 +3404,27 @@ ffff27f8:	f9002660 	str	x0, [x19, #0x48]	; usb_48 = BASE
 ffff27fc:	52800060 	mov	w0, #0x3
 ffff2800:	b9005660 	str	w0, [x19, #0x54]	; usb_54 = 3
 ffff2804:	b900627f 	str	wzr, [x19, #0x60]	; usb_60 = 0
-ffff2808:	d0ffc661 	adrp	x1, 0xff8c0000
 
 ; now another small block "A"
 ;
-;	A + 0 = B
+;	A + 0 = B (8 byte addr)
 ;	A = 8 = 0x100 (size of B)
 ;	A + 16 = 0
-;	A + 24 = B
+;	A + 20 = 0
+;	A + 24 = B (8 byte addr)
 ;	A + 32 = "usb"
 ;
-; We don't save any pointers to B anywhere, we just "know"
+; We don't save any pointers to A anywhere, we just "know"
 ; it is at SRAM + 0x410
 
-ffff280c:	91104034 	add	x20, x1, #0x410		; SRAM + 0x410
-ffff2810:	f9000a9f 	str	xzr, [x20, #16]
-ffff2814:	f900069f 	str	xzr, [x20, #8]
-ffff2818:	f902083f 	str	xzr, [x1, #0x410]
+ffff2808:	d0ffc661 	adrp	x1, 0xff8c0000
+ffff280c:	91104034 	add	x20, x1, #0x410		; SRAM + 0x410 "A"
+ffff2810:	f9000a9f 	str	xzr, [x20, #16]		; clear 8 bytes
+ffff2814:	f900069f 	str	xzr, [x20, #8]		; pointless
+ffff2818:	f902083f 	str	xzr, [x1, #0x410]	; also pointless
 ffff281c:	52800020 	mov	w0, #0x1
 ffff2820:	b9005260 	str	w0, [x19, #0x50]	; usb_50 = 1
-ffff2824:	f9001293 	str	x19, [x20, #32]
+ffff2824:	f9001293 	str	x19, [x20, #32]		; "usb"
 
 ffff2828:	52802000 	mov	w0, #0x100
 ffff282c:	b9000a80 	str	w0, [x20, #8]		; size of B, which follows
@@ -3425,6 +3445,11 @@ ffff2848:	9400070d 	bl	0xffff447c		; memset ( x0, 0x100, 0 )
 ; This is the USB device control register.
 ; The bit set is "core soft reset" and is self clearing.
 ; See trm2 page 147
+; it is a bit odd that this address is fetched from a stored value
+; rather than being generated via an offset from x19,
+; (as is done a few lines further along).
+; But it seems to be a one time thing, and who cares really.
+
 ffff284c:	f0000000 	adrp	x0, 0xffff5000
 ffff2850:	b9412c00 	ldr	w0, [x0, #0x12c]	; ffff512c: fe80c704
 ffff2854:	52a80001 	mov	w1, #0x40000000
@@ -3531,7 +3556,7 @@ ffff2934:	97fff855 	bl	0xffff0a88		; mmdelay ( 100 )
 ; bits 13:10 are turnaround time (set to 5) for 15 bit UTMI+
 ; clear bit 8 (enable utmi sleep)
 ; set bit 3 (select 16 bit PHY)
-ffff2938:	f9402660 	ldr	x0, [x19, #0x48]
+ffff2938:	f9402660 	ldr	x0, [x19, #0x48]	; usb_hw
 ffff293c:	b9410001 	ldr	w1, [x0, #0x100]
 ffff2940:	f0000002 	adrp	x2, 0xffff5000
 ffff2944:	b9413042 	ldr	w2, [x2, #0x130]	; ffff5130: bfffc2f7
@@ -3550,10 +3575,13 @@ ffff2960:	b9000e9f 	str	wzr, [x20, #12]
 ; 0xc404 is event buffer addr, high 32 bits
 ; 0xc408 is event buffer size in bytes
 ; 0xc40c is event buffer count in bytes
-
+;
 ; We copy the address of block "B" above,
+; note that we copy a 64 bit address in 2 pieces
+
 ; which is apparently the event buffer, of size 0x100
-ffff2964:	f9402660 	ldr	x0, [x19, #0x48]
+
+ffff2964:	f9402660 	ldr	x0, [x19, #0x48]	; usb_hw
 ffff2968:	f9400e81 	ldr	x1, [x20, #24]		; from A+24
 ffff296c:	b9030001 	str	w1, [x0, #0x300]
 
@@ -3578,7 +3606,7 @@ ffff299c:	32130021 	orr	w1, w1, #0x2000
 ffff29a0:	b9001001 	str	w1, [x0, #16]
 
 ffff29a4:	aa1303e0 	mov	x0, x19
-ffff29a8:	94000392 	bl	0xffff37f0	; usb_init1 ( "usb" )
+ffff29a8:	94000392 	bl	0xffff37f0	; usb_mem_setup ( "usb" )
 ffff29ac:	aa1303e0 	mov	x0, x19
 ffff29b0:	940002f1 	bl	0xffff3574	; usb_init2 ( "usb" )
 ffff29b4:	52800021 	mov	w1, #0x1
@@ -3591,102 +3619,200 @@ ffff29c8:	a9417bfd 	ldp	x29, x30, [sp, #16]
 ffff29cc:	910083ff 	add	sp, sp, #0x20
 ffff29d0:	d65f03c0 	ret
 
+# END of usb_init
+
 ; =====================
-; called from below (the only call)
-ffff29d4:	f9400c02 	ldr	x2, [x0, #24]
-ffff29d8:	52800103 	mov	w3, #0x8                   	// #8
-ffff29dc:	52800404 	mov	w4, #0x20                  	// #32
+
+; called from one place below -- usb_transfer_x ( "usb" )
+; this basically sets up the registers as
+; if we were calling usb_transfer(), but we fall through into it.
+
+ffff29d4:	f9400c02 	ldr	x2, [x0, #24]	; J
+ffff29d8:	52800103 	mov	w3, #0x8
+ffff29dc:	52800404 	mov	w4, #0x20
 ffff29e0:	aa1f03e1 	mov	x1, xzr
 ffff29e4:	aa1f03e5 	mov	x5, xzr
 
-; ha - why this?
-ffff29e8:	14000001 	b	0xffff29ec
-ffff29ec:	d100c3ff 	sub	sp, sp, #0x30
+; usb_transfer ( "usb", 0, J, 8, 0x20, 0 )
 
+; the reference to "J" suggests we might be reading into J,
+; especially given that at this stage it is a bunch of zeros.
+; J is 64 bytes in size
+
+ffff29e8:	14000001 	b	0xffff29ec		; usb_transfer ()
+; The above branch is sort of silly
+
+; ============================================================================================
+
+; subroutine usb_transfer ()
+; note that we have the odd "fall through" from above
+
+; arguments:
+;   x0 = "usb"
+;   x1 = endpoint index (0 or 1)
+;   x2 = buf
+;   x3 = A
+;   x4 = B
+;   x5 = flag -- 0 or 1
+
+I had thought x4 was a count, but now I am not so sure.
+
+; a typical call is:
+; usb_transfer ( "usb", 0, usb+24 (J), 8, 0x20, 0 )
+
+ffff29ec:	d100c3ff 	sub	sp, sp, #0x30
 ffff29f0:	a9027bfd 	stp	x29, x30, [sp, #32]
 ffff29f4:	910083fd 	add	x29, sp, #0x20
 ffff29f8:	a90153f3 	stp	x19, x20, [sp, #16]
-ffff29fc:	aa0003f3 	mov	x19, x0
+
+; We expect x1 to be either 0 or 1
+; this does some trickery to get x20
+; to point to either 0x38 (i.e. X) or 0x40 (i.e. Y)
+; note that the add shifts the byte in w1 by 3 (a multiply by 8)
+; then zero extends (uxtb) the result.
+
+ffff29fc:	aa0003f3 	mov	x19, x0			; x19 = "usb"
 ffff2a00:	8b210e60 	add	x0, x19, w1, uxtb #3
-ffff2a04:	f9401c14 	ldr	x20, [x0, #0x38]
+ffff2a04:	f9401c14 	ldr	x20, [x0, #0x38]	; X or Y
+
+; Check this bit 0x10 bit 4 and if it is set, skip the whole game.
+; Note that this bit is set at the end of this code.
+; Is it some kind of "transfer in progress" flag,
+; and if so, where is it cleared?
+
 ffff2a08:	39406280 	ldrb	w0, [x20, #24]
-ffff2a0c:	37200860 	tbnz	w0, #4, 0xffff2b18
-ffff2a10:	b9400286 	ldr	w6, [x20]
-ffff2a14:	f9400660 	ldr	x0, [x19, #8]
-ffff2a18:	53007cc1 	lsr	w1, w6, #0
+ffff2a0c:	37200860 	tbnz	w0, #4, 0xffff2b18	; return
+
+ffff2a10:	b9400286 	ldr	w6, [x20]		; count
+ffff2a14:	f9400660 	ldr	x0, [x19, #8]		; K
+ffff2a18:	53007cc1 	lsr	w1, w6, #0		; w1 = w6
+
+; test flag (usually 0, sometimes 1)
+; if it is 1, increment a counter in X/Y
 ffff2a1c:	34000065 	cbz	w5, 0xffff2a28
-ffff2a20:	110004c6 	add	w6, w6, #0x1
+ffff2a20:	110004c6 	add	w6, w6, #0x1		; w6++
 ffff2a24:	b9000286 	str	w6, [x20]
-ffff2a28:	8b217006 	add	x6, x0, x1, uxtx #4
-ffff2a2c:	d37cec21 	lsl	x1, x1, #4
-ffff2a30:	38216802 	strb	w2, [x0, x1]
-ffff2a34:	d358fc40 	lsr	x0, x2, #24
-ffff2a38:	39000cc0 	strb	w0, [x6, #3]
+
+ffff2a28:	8b217006 	add	x6, x0, x1, uxtx #4	; x6 = K + count<<4
+ffff2a2c:	d37cec21 	lsl	x1, x1, #4		; count *= 16
+
+; We are going to move the address in w2, byte by byte into K
+; x0 points to K at the very start
+; x6 is offset into K by count*16
+; let's denote that offset location "KK"
+
+; move w2 (buf) 8 bytes
+ffff2a30:	38216802 	strb	w2, [x0, x1]		; KK[0] = w2>>0
+ffff2a34:	d358fc40 	lsr	x0, x2, #24		
+ffff2a38:	39000cc0 	strb	w0, [x6, #3]		; kk[3] = x2>>24
 ffff2a3c:	d350fc40 	lsr	x0, x2, #16
-ffff2a40:	390008c0 	strb	w0, [x6, #2]
+ffff2a40:	390008c0 	strb	w0, [x6, #2]		; kk[2] = x2>>16
 ffff2a44:	d348fc40 	lsr	x0, x2, #8
-ffff2a48:	390004c0 	strb	w0, [x6, #1]
+ffff2a48:	390004c0 	strb	w0, [x6, #1]		; kk[1] = x2>>8
 ffff2a4c:	d360fc40 	lsr	x0, x2, #32
 ffff2a50:	d378fc41 	lsr	x1, x2, #56
-ffff2a54:	39001cc1 	strb	w1, [x6, #7]
+ffff2a54:	39001cc1 	strb	w1, [x6, #7]		; kk[7] = x2>>56
 ffff2a58:	d370fc41 	lsr	x1, x2, #48
-ffff2a5c:	390018c1 	strb	w1, [x6, #6]
+ffff2a5c:	390018c1 	strb	w1, [x6, #6]		; kk[6] = x2>>48
 ffff2a60:	d368fc41 	lsr	x1, x2, #40
-ffff2a64:	390014c1 	strb	w1, [x6, #5]
-ffff2a68:	390010c0 	strb	w0, [x6, #4]
+ffff2a64:	390014c1 	strb	w1, [x6, #5]		; kk[5] = x2>>40
+ffff2a68:	390010c0 	strb	w0, [x6, #4]		; kk[4] = x2>>32
+
+; move w3 (A) 4 bytes
 ffff2a6c:	53187c60 	lsr	w0, w3, #24
-ffff2a70:	39002cc0 	strb	w0, [x6, #11]
+ffff2a70:	39002cc0 	strb	w0, [x6, #11]		; kk[11] = w3>>24
 ffff2a74:	53107c60 	lsr	w0, w3, #16
-ffff2a78:	390028c0 	strb	w0, [x6, #10]
+ffff2a78:	390028c0 	strb	w0, [x6, #10]		; kk[10] = w3>>16
 ffff2a7c:	53087c60 	lsr	w0, w3, #8
-ffff2a80:	390024c0 	strb	w0, [x6, #9]
-ffff2a84:	390020c3 	strb	w3, [x6, #8]
+ffff2a80:	390024c0 	strb	w0, [x6, #9]		; kk[9] = w3<<8
+ffff2a84:	390020c3 	strb	w3, [x6, #8]		; kk[8] = w3<<0
+
+; This flag is 0 or 1
 ffff2a88:	710000bf 	cmp	w5, #0x0
-ffff2a8c:	52818060 	mov	w0, #0xc03                 	// #3075
-ffff2a90:	528080a1 	mov	w1, #0x405                 	// #1029
-ffff2a94:	1a801020 	csel	w0, w1, w0, ne  // ne = any
-ffff2a98:	2a040000 	orr	w0, w0, w4
+ffff2a8c:	52818060 	mov	w0, #0xc03	; for flag == 0
+ffff2a90:	528080a1 	mov	w1, #0x405	; for flag == 1
+ffff2a94:	1a801020 	csel	w0, w1, w0, ne
+
+ffff2a98:	2a040000 	orr	w0, w0, w4	; combine with w4 (B)
+
 ffff2a9c:	53187c01 	lsr	w1, w0, #24
-ffff2aa0:	39003cc1 	strb	w1, [x6, #15]
+ffff2aa0:	39003cc1 	strb	w1, [x6, #15]		; kk[15] = w4>>24
 ffff2aa4:	53107c01 	lsr	w1, w0, #16
-ffff2aa8:	390038c1 	strb	w1, [x6, #14]
+ffff2aa8:	390038c1 	strb	w1, [x6, #14]		; kk[14] = w4>>16
 ffff2aac:	53087c01 	lsr	w1, w0, #8
-ffff2ab0:	390034c1 	strb	w1, [x6, #13]
-ffff2ab4:	390030c0 	strb	w0, [x6, #12]
-ffff2ab8:	35000305 	cbnz	w5, 0xffff2b18
-ffff2abc:	b90003ff 	str	wzr, [sp]
-ffff2ac0:	f9401260 	ldr	x0, [x19, #32]
+ffff2ab0:	390034c1 	strb	w1, [x6, #13]		; kk[13] = w4>>8
+ffff2ab4:	390030c0 	strb	w0, [x6, #12]		; kk[12] = w4>>0
+
+; This is surprising.  We return here if the final argument was 1
+; in that case, we would have set up the K information, but done nothing with it.
+
+ffff2ab8:	35000305 	cbnz	w5, 0xffff2b18		; return if flag != 0
+
+; Now we construct a 3 word param block that simply holds
+; a pointer to the K block.
+
+ffff2abc:	b90003ff 	str	wzr, [sp]		; param[0] = 0
+ffff2ac0:	f9401260 	ldr	x0, [x19, #32]		; K address
 ffff2ac4:	d360fc01 	lsr	x1, x0, #32
-ffff2ac8:	910003e3 	mov	x3, sp
-ffff2acc:	b9000861 	str	w1, [x3, #8]
-ffff2ad0:	b9000460 	str	w0, [x3, #4]
-ffff2ad4:	39408281 	ldrb	w1, [x20, #32]		; select endpoint
+ffff2ac8:	910003e3 	mov	x3, sp			; addr of params
+ffff2acc:	b9000861 	str	w1, [x3, #8]		; param[2] = upper 32 bits of K
+ffff2ad0:	b9000460 	str	w0, [x3, #4]		; param[1] = lower 32 bits of K
+
+ffff2ad4:	39408281 	ldrb	w1, [x20, #32]		; get endpoint index from X/Y
 ffff2ad8:	528000c2 	mov	w2, #0x6		; cmd = 6 (start transfer)
 ffff2adc:	aa1303e0 	mov	x0, x19			; "usb"
-ffff2ae0:	9400022d 	bl	0xffff3394		; usb_endpoint_command
+ffff2ae0:	9400022d 	bl	0xffff3394		; usb_endpoint_command ( "usb", ep_index, 6, params )
+
 ffff2ae4:	7100001f 	cmp	w0, #0x0
-ffff2ae8:	5400018b 	b.lt	0xffff2b18  // b.tstop
+ffff2ae8:	5400018b 	b.lt	0xffff2b18		; we failed !
+
+; this location in X/Y has some bits
+; this particular bit is checked up at the top of
+; this routine, and if it is set, the entire routine
+; is skipped.
+
 ffff2aec:	b9401a80 	ldr	w0, [x20, #24]
-ffff2af0:	321c0000 	orr	w0, w0, #0x10
+ffff2af0:	321c0000 	orr	w0, w0, #0x10		; set bit 4
 ffff2af4:	b9001a80 	str	w0, [x20, #24]
-ffff2af8:	f9402660 	ldr	x0, [x19, #0x48]
-ffff2afc:	39408281 	ldrb	w1, [x20, #32]
+
+; Read a usb hw register offset from at c80c
+; we calculate x0 = ep-index * 16, then use that
+; as an offset to get the "endpoint-n command register
+; for that endpoint.
+
+; We extract a 7 bit bitfield starting at 16
+; i.e bits 22:16.
+; This gives us the "transfer resource index"
+; We store it to X/Y offset 0x22 (just a byte)
+
+ffff2af8:	f9402660 	ldr	x0, [x19, #0x48]	; usb hw
+ffff2afc:	39408281 	ldrb	w1, [x20, #32]		; get ep index
 ffff2b00:	8b217000 	add	x0, x0, x1, uxtx #4
-ffff2b04:	b9470c00 	ldr	w0, [x0, #0x70c]
+ffff2b04:	b9470c00 	ldr	w0, [x0, #0x70c]	; read USB
 ffff2b08:	53105800 	ubfx	w0, w0, #16, #7
-ffff2b0c:	39008a80 	strb	w0, [x20, #0x22]
-ffff2b10:	52800020 	mov	w0, #0x1                   	// #1
-ffff2b14:	b9005a60 	str	w0, [x19, #0x58]
+ffff2b0c:	39008a80 	strb	w0, [x20, #0x22]	; usb transfer index
+
+ffff2b10:	52800020 	mov	w0, #0x1
+ffff2b14:	b9005a60 	str	w0, [x19, #0x58]	; usb_58 = 1
+
+; done
 ffff2b18:	a94153f3 	ldp	x19, x20, [sp, #16]
 ffff2b1c:	a9427bfd 	ldp	x29, x30, [sp, #32]
 ffff2b20:	9100c3ff 	add	sp, sp, #0x30
 ffff2b24:	d65f03c0 	ret
 
+# END of usb_transfer
+
 ;  ======================================
-; subroutine -- usb_dingus ( "usb", buf )
+
+; subroutine -- usb_xfer ( "usb", buf )
+
+;   HUGE !
+
+;  only one call, from usb_run ()
+
 ;  passed the pointer to "usb" in x0
 ;  another pointer in x1, we call this "buf"
-;  only one call, from usb_run ()
 ;
 ; ubfx is "bitfield extract"
 ;	ubfx	w1, w0, #6, #4
@@ -3713,7 +3839,8 @@ ffff2b48:	39400a82 	ldrb	w2, [x20, #2]
 ffff2b4c:	39400683 	ldrb	w3, [x20, #1]
 ffff2b50:	39400284 	ldrb	w4, [x20]
 
-ffff2b54:	aa0003f3 	mov	x19, x0			; save x0
+ffff2b54:	aa0003f3 	mov	x19, x0			; x19 = "usb"
+
 ffff2b58:	2a012040 	orr	w0, w2, w1, lsl #8
 ffff2b5c:	2a032081 	orr	w1, w4, w3, lsl #8
 ffff2b60:	2a004020 	orr	w0, w1, w0, lsl #16
@@ -3745,16 +3872,18 @@ ffff2ba4:	b9405a61 	ldr	w1, [x19, #0x58]
 ffff2ba8:	71000c3f 	cmp	w1, #0x3
 ffff2bac:	54002981 	b.ne	0xffff30dc		return if ne 3
 ffff2bb0:	52800061 	mov	w1, #0x3
-ffff2bb4:	b9005e61 	str	w1, [x19, #0x5c]
+ffff2bb4:	b9005e61 	str	w1, [x19, #0x5c]	; xfer_code = 3
 ffff2bb8:	f9400261 	ldr	x1, [x19]
 ffff2bbc:	39401422 	ldrb	w2, [x1, #5]
 ffff2bc0:	39401021 	ldrb	w1, [x1, #4]
 ffff2bc4:	2a022021 	orr	w1, w1, w2, lsl #8
 ffff2bc8:	7111c43f 	cmp	w1, #0x471
-ffff2bcc:	540000a0 	b.eq	0xffff2be0  // b.none
+ffff2bcc:	540000a0 	b.eq	0xffff2be0
+
 ffff2bd0:	aa1303e0 	mov	x0, x19
 ffff2bd4:	aa1403e1 	mov	x1, x20
-ffff2bd8:	94000147 	bl	0xffff30f4		; usb_dingus2 ()
+ffff2bd8:	94000147 	bl	0xffff30f4		; usb_xfer2 ()
+
 ffff2bdc:	39419660 	ldrb	w0, [x19, #0x65]
 ffff2be0:	36280440 	tbz	w0, #5, 0xffff2c68
 ffff2be4:	7940da60 	ldrh	w0, [x19, #0x6c]
@@ -3769,8 +3898,9 @@ ffff2c04:	54000241 	b.ne	0xffff2c4c  // b.any
 ffff2c08:	f9402660 	ldr	x0, [x19, #0x48]
 ffff2c0c:	b9430c00 	ldr	w0, [x0, #0x30c]
 ffff2c10:	121e3400 	and	w0, w0, #0xfffc
+
 ffff2c14:	d0ffc661 	adrp	x1, 0xff8c0000
-ffff2c18:	91104021 	add	x1, x1, #0x410		; usb block A * XXXXX
+ffff2c18:	91104021 	add	x1, x1, #0x410		; SRAM + 0x410 'A'
 ffff2c1c:	b9001020 	str	w0, [x1, #16]
 ffff2c20:	340000e0 	cbz	w0, 0xffff2c3c
 ffff2c24:	f9402661 	ldr	x1, [x19, #0x48]
@@ -3785,7 +3915,7 @@ ffff2c44:	39401000 	ldrb	w0, [x0, #4]
 ffff2c48:	2a012000 	orr	w0, w0, w1, lsl #8
 ffff2c4c:	f9403a61 	ldr	x1, [x19, #0x70]
 ffff2c50:	b9406a62 	ldr	w2, [x19, #0x68]
-ffff2c54:	940003de 	bl	0xffff3bcc
+ffff2c54:	940003de 	bl	0xffff3bcc		; usb_try_run ()
 ffff2c58:	39419660 	ldrb	w0, [x19, #0x65]
 ffff2c5c:	52801be1 	mov	w1, #0xdf                  	// #223
 ffff2c60:	0a010000 	and	w0, w0, w1
@@ -3798,10 +3928,10 @@ ffff2c78:	7111c41f 	cmp	w0, #0x471
 ffff2c7c:	54002301 	b.ne	0xffff30dc		; return if ne 0x471
 ffff2c80:	aa1303e0 	mov	x0, x19
 ffff2c84:	aa1403e1 	mov	x1, x20
-ffff2c88:	9400011b 	bl	0xffff30f4		; usb_dingus2 ()
+ffff2c88:	9400011b 	bl	0xffff30f4		; usb_xfer2 ()
 ffff2c8c:	14000114 	b	0xffff30dc		; return
 
-; still going ...
+; still going ...  usb_xfer ()
 ffff2c90:	7100043f 	cmp	w1, #0x1
 ffff2c94:	54002241 	b.ne	0xffff30dc  // b.any
 ffff2c98:	53011400 	ubfx	w0, w0, #1, #5
@@ -3814,11 +3944,22 @@ ffff2cb0:	3900881f 	strb	wzr, [x0, #0x22]
 ffff2cb4:	39419660 	ldrb	w0, [x19, #0x65]
 ffff2cb8:	121c7802 	and	w2, w0, #0xfffffff7
 ffff2cbc:	39019662 	strb	w2, [x19, #0x65]
-ffff2cc0:	b9405e61 	ldr	w1, [x19, #0x5c]
+
+; this is the only place this field is inspected
+; -- I have called it "xfer_code"
+; it gets set before calls to usb_xfer* and usb_transfer
+; values set are 1,2, or 3  --  so we have 3 cases here
+;
+; in fact this routine sets the value back to 1 below
+; I am going to dub this "xfer_code"
+
+ffff2cc0:	b9405e61 	ldr	w1, [x19, #0x5c]	; get xfer_code
 ffff2cc4:	71000c3f 	cmp	w1, #0x3
-ffff2cc8:	54000820 	b.eq	0xffff2dcc  // b.none
+ffff2cc8:	54000820 	b.eq	0xffff2dcc		; == 3
 ffff2ccc:	7100083f 	cmp	w1, #0x2
-ffff2cd0:	54000841 	b.ne	0xffff2dd8  // b.any
+ffff2cd0:	54000841 	b.ne	0xffff2dd8		; must be 1
+
+; fall through for xfer_code== 2
 ffff2cd4:	39400e81 	ldrb	w1, [x20, #3]
 ffff2cd8:	39400a82 	ldrb	w2, [x20, #2]
 ffff2cdc:	2a012041 	orr	w1, w2, w1, lsl #8
@@ -3874,10 +4015,12 @@ ffff2da0:	340017c0 	cbz	w0, 0xffff3098
 ffff2da4:	910023e3 	add	x3, sp, #0x8
 ffff2da8:	b900087f 	str	wzr, [x3, #8]
 ffff2dac:	f90007ff 	str	xzr, [sp, #8]
-ffff2db0:	39408281 	ldrb	w1, [x20, #32]		; select endpoint
+ffff2db0:	39408281 	ldrb	w1, [x20, #32]		; get endpoint index
+
+; still going ...  usb_xfer ()
 
 ; We set up the endpoint command here.
-; cmd = 9 is "end transfer" with no parameters
+; cmd = 8 is "end transfer" with no parameters
 ; the bit 0x100 is bit 8 (CMDIOC) "interrupt on completion"
 ; we also shift register w0 into the top 16 bits which is
 ; "commandparam", which for end transfer is the
@@ -3887,14 +4030,20 @@ ffff2db0:	39408281 	ldrb	w1, [x20, #32]		; select endpoint
 ffff2db4:	52802102 	mov	w2, #0x108
 ffff2db8:	2a004042 	orr	w2, w2, w0, lsl #16	; cmd =
 ffff2dbc:	aa1303e0 	mov	x0, x19			; "usb"
-ffff2dc0:	94000175 	bl	0xffff3394		; usb_endpoint_command
+ffff2dc0:	94000175 	bl	0xffff3394		; usb_endpoint_command ( "usb", epindex, cmd, params )
 ffff2dc4:	39008a9f 	strb	wzr, [x20, #0x22]
 ffff2dc8:	140000b4 	b	0xffff3098
-ffff2dcc:	52800020 	mov	w0, #0x1                   	// #1
+
+; here when xfer_code == 3
+ffff2dcc:	52800020 	mov	w0, #0x1
 ffff2dd0:	b9005e60 	str	w0, [x19, #0x5c]
 ffff2dd4:	140000bb 	b	0xffff30c0
+
+; here when xfer_code == 1
+; this check is more or less a belt and suspenders assertion check
 ffff2dd8:	7100043f 	cmp	w1, #0x1
-ffff2ddc:	54001801 	b.ne	0xffff30dc		; return if ne 1
+ffff2ddc:	54001801 	b.ne	0xffff30dc		; return
+
 ffff2de0:	f9400261 	ldr	x1, [x19]
 ffff2de4:	39401c23 	ldrb	w3, [x1, #7]
 ffff2de8:	39401824 	ldrb	w4, [x1, #6]
@@ -4002,7 +4151,7 @@ ffff2f7c:	2a002074 	orr	w20, w3, w0, lsl #8
 ffff2f80:	71001c5f 	cmp	w2, #0x7
 ffff2f84:	540006e1 	b.ne	0xffff3060  // b.any
 ffff2f88:	aa1303e0 	mov	x0, x19
-ffff2f8c:	9400006e 	bl	0xffff3144
+ffff2f8c:	9400006e 	bl	0xffff3144		; usb_xfer3
 ffff2f90:	12003e80 	and	w0, w20, #0xffff
 ffff2f94:	35000a40 	cbnz	w0, 0xffff30dc
 ffff2f98:	528000c0 	mov	w0, #0x6                   	// #6
@@ -4028,8 +4177,10 @@ ffff2fe4:	1a800020 	csel	w0, w1, w0, eq  // eq = none
 ffff2fe8:	b9006260 	str	w0, [x19, #0x60]
 ffff2fec:	1400003c 	b	0xffff30dc
 
+; still going ...  usb_xfer ()
+
 ffff2ff0:	aa1303e0 	mov	x0, x19
-ffff2ff4:	94000054 	bl	0xffff3144
+ffff2ff4:	94000054 	bl	0xffff3144		; usb_xfer3
 ffff2ff8:	14000039 	b	0xffff30dc
 ffff2ffc:	7100045f 	cmp	w2, #0x1
 ffff3000:	540006e1 	b.ne	0xffff30dc  // b.any
@@ -4050,13 +4201,14 @@ ffff3028:	91070000 	add	x0, x0, #0x1c0
 ffff302c:	b0000001 	adrp	x1, 0xffff4000
 ffff3030:	91302021 	add	x1, x1, #0xc08		;ffff4c08: 40000000 02000112  XYZ
 ffff3034:	94000507 	bl	0xffff4450	; memcpy
+
 ffff3038:	52800040 	mov	w0, #0x2
-ffff303c:	b9005e60 	str	w0, [x19, #0x5c]
+ffff303c:	b9005e60 	str	w0, [x19, #0x5c]	; xfer_code = 2
 
 ffff3040:	aa1303e0 	mov	x0, x19
 ffff3044:	aa1403e1 	mov	x1, x20
 ffff3048:	aa1503e2 	mov	x2, x21		; count
-ffff304c:	94000084 	bl	0xffff325c	; usb_dingus99 ()
+ffff304c:	94000084 	bl	0xffff325c	; usb_xfer4 ()
 
 ffff3050:	b9401a80 	ldr	w0, [x20, #24]
 ffff3054:	12007800 	and	w0, w0, #0x7fffffff
@@ -4065,7 +4217,7 @@ ffff305c:	14000020 	b	0xffff30dc
 ffff3060:	7100185f 	cmp	w2, #0x6
 ffff3064:	540001a1 	b.ne	0xffff3098  // b.any
 ffff3068:	aa1303e0 	mov	x0, x19
-ffff306c:	94000036 	bl	0xffff3144
+ffff306c:	94000036 	bl	0xffff3144		; usb_xfer3
 ffff3070:	12003e80 	and	w0, w20, #0xffff
 ffff3074:	34000340 	cbz	w0, 0xffff30dc
 ffff3078:	528000e0 	mov	w0, #0x7                   	// #7
@@ -4077,22 +4229,28 @@ ffff308c:	2a020021 	orr	w1, w1, w2
 ffff3090:	b9060401 	str	w1, [x0, #0x604]	; USB dctrl
 ffff3094:	14000012 	b	0xffff30dc
 ffff3098:	f9402260 	ldr	x0, [x19, #0x40]
-ffff309c:	52800035 	mov	w21, #0x1                   	// #1
+
+; still going ...  usb_xfer ()
+
+ffff309c:	52800035 	mov	w21, #0x1		; value "1" for xfer_code
 ffff30a0:	b9001815 	str	w21, [x0, #24]
-ffff30a4:	f9401e74 	ldr	x20, [x19, #0x38]
-ffff30a8:	52800021 	mov	w1, #0x1                   	// #1
+ffff30a4:	f9401e74 	ldr	x20, [x19, #0x38]	; X
+ffff30a8:	52800021 	mov	w1, #0x1
 ffff30ac:	aa1403e0 	mov	x0, x20
 ffff30b0:	aa1f03e2 	mov	x2, xzr
-ffff30b4:	940000e5 	bl	0xffff3448		; usb_dingus101 ()
+ffff30b4:	940000e5 	bl	0xffff3448		; usb_stall ( X/Y, 1, 0 )
 ffff30b8:	b9001a95 	str	w21, [x20, #24]
-ffff30bc:	b9005e75 	str	w21, [x19, #0x5c]
-ffff30c0:	f9400e62 	ldr	x2, [x19, #24]
-ffff30c4:	52800103 	mov	w3, #0x8                   	// #8
-ffff30c8:	52800404 	mov	w4, #0x20                  	// #32
+ffff30bc:	b9005e75 	str	w21, [x19, #0x5c]	; set xfer_code
+
+; usb_transfer ( "usb", 0, J, 8, 0x20, 0 )
+
+ffff30c0:	f9400e62 	ldr	x2, [x19, #24]		; J
+ffff30c4:	52800103 	mov	w3, #0x8
+ffff30c8:	52800404 	mov	w4, #0x20
 ffff30cc:	aa1303e0 	mov	x0, x19
 ffff30d0:	aa1f03e1 	mov	x1, xzr
 ffff30d4:	aa1f03e5 	mov	x5, xzr
-ffff30d8:	97fffe45 	bl	0xffff29ec
+ffff30d8:	97fffe45 	bl	0xffff29ec		; usb_transfer ()
 
 ; Here is where we return
 ffff30dc:	f9400ff3 	ldr	x19, [sp, #24]
@@ -4102,35 +4260,64 @@ ffff30e8:	a9447bfd 	ldp	x29, x30, [sp, #64]
 ffff30ec:	910143ff 	add	sp, sp, #0x50
 ffff30f0:	d65f03c0 	ret
 
-; ===========================================
-; subroutine -- usb_dingus2
-;  2 calls from above in usb_dingus
+; END of usb_xfer ()
 
-ffff30f4:	39400c22 	ldrb	w2, [x1, #3]
+; ===========================================
+
+; subroutine -- usb_xfer2
+;  2 calls from above in usb_xfer
+; -- no prolog
+; x0 = "usb"
+; x1 = buf
+
+; First, we assembly a 4 byte object from a
+;  possibly badly aligned location in "buf'
+ffff30f4:	39400c22 	ldrb	w2, [x1, #3]		; no prolog
 ffff30f8:	39400823 	ldrb	w3, [x1, #2]
 ffff30fc:	39400424 	ldrb	w4, [x1, #1]
 ffff3100:	39400021 	ldrb	w1, [x1]
 ffff3104:	2a022062 	orr	w2, w3, w2, lsl #8
 ffff3108:	2a042021 	orr	w1, w1, w4, lsl #8
 ffff310c:	2a024021 	orr	w1, w1, w2, lsl #16
+
+; pull a bitfield 5:0
 ffff3110:	53011421 	ubfx	w1, w1, #1, #5
 ffff3114:	8b214c00 	add	x0, x0, w1, uxtw #3
-ffff3118:	f9401c01 	ldr	x1, [x0, #0x38]
-ffff311c:	f9400420 	ldr	x0, [x1, #8]
+
+; the 0x38 offset suggests that somehow
+; the above made x0 = "usb"
+; and hence this makes x1 = X
+ffff3118:	f9401c01 	ldr	x1, [x0, #0x38]		; X
+ffff311c:	f9400420 	ldr	x0, [x1, #8]		; "usb"
 ffff3120:	39419403 	ldrb	w3, [x0, #0x65]
-ffff3124:	f9400c02 	ldr	x2, [x0, #24]
-ffff3128:	39408021 	ldrb	w1, [x1, #32]
+ffff3124:	f9400c02 	ldr	x2, [x0, #24]		; buf (somehow)
+
+; note that we curiously augment the 0x30 count with some flag bits
+
+; usb_transfer ( "usb", ep-index, buf, 0, 0x30 + flags, 0 )
+
+ffff3128:	39408021 	ldrb	w1, [x1, #32]		; ep-index
 ffff312c:	121a0063 	and	w3, w3, #0x40
-ffff3130:	52800604 	mov	w4, #0x30                  	// #48
+ffff3130:	52800604 	mov	w4, #0x30
 ffff3134:	0b430884 	add	w4, w4, w3, lsr #2
 ffff3138:	aa1f03e3 	mov	x3, xzr
 ffff313c:	aa1f03e5 	mov	x5, xzr
-ffff3140:	17fffe2b 	b	0xffff29ec
+ffff3140:	17fffe2b 	b	0xffff29ec		; usb_transfer ()
+
+; no return here, we just branch above
+; end of usb_xfer2
+
+; =========================================
+
+; subroutine -- usb_xfer3
+; 3 calls from usb_xfer
+
 ffff3144:	d100c3ff 	sub	sp, sp, #0x30
 ffff3148:	a9027bfd 	stp	x29, x30, [sp, #32]
 ffff314c:	910083fd 	add	x29, sp, #0x20
 ffff3150:	a90157f4 	stp	x20, x21, [sp, #16]
 ffff3154:	f90007f3 	str	x19, [sp, #8]
+
 ffff3158:	39400022 	ldrb	w2, [x1]
 ffff315c:	aa0003f3 	mov	x19, x0
 ffff3160:	121b0440 	and	w0, w2, #0x60
@@ -4157,22 +4344,27 @@ ffff31b0:	540002a1 	b.ne	0xffff3204  // b.any
 ffff31b4:	f9003a7f 	str	xzr, [x19, #0x70]
 ffff31b8:	14000018 	b	0xffff3218
 ffff31bc:	f9402260 	ldr	x0, [x19, #0x40]
-ffff31c0:	52800035 	mov	w21, #0x1                   	// #1
+
+ffff31c0:	52800035 	mov	w21, #0x1		; value "1"  for xfer_code
 ffff31c4:	b9001815 	str	w21, [x0, #24]
 ffff31c8:	f9401e74 	ldr	x20, [x19, #0x38]
-ffff31cc:	52800021 	mov	w1, #0x1                   	// #1
+ffff31cc:	52800021 	mov	w1, #0x1
 ffff31d0:	aa1403e0 	mov	x0, x20
 ffff31d4:	aa1f03e2 	mov	x2, xzr
-ffff31d8:	9400009c 	bl	0xffff3448		; usb_dingus101 ()
-ffff31dc:	b9001a95 	str	w21, [x20, #24]
-ffff31e0:	b9005e75 	str	w21, [x19, #0x5c]
-ffff31e4:	f9400e62 	ldr	x2, [x19, #24]
-ffff31e8:	52800103 	mov	w3, #0x8                   	// #8
-ffff31ec:	52800404 	mov	w4, #0x20                  	// #32
+ffff31d8:	9400009c 	bl	0xffff3448		; usb_stall ( X/Y, 1, 0 )
+ffff31dc:	b9001a95 	str	w21, [x20, #24]		; again (maybe it changed?)
+ffff31e0:	b9005e75 	str	w21, [x19, #0x5c]	; set xfer_code
+
+; usb_transfer ( "usb", 0, J, 8, 0x20, 0 )
+
+ffff31e4:	f9400e62 	ldr	x2, [x19, #24]		; J
+ffff31e8:	52800103 	mov	w3, #0x8
+ffff31ec:	52800404 	mov	w4, #0x20
 ffff31f0:	aa1303e0 	mov	x0, x19
 ffff31f4:	aa1f03e1 	mov	x1, xzr
 ffff31f8:	aa1f03e5 	mov	x5, xzr
-ffff31fc:	97fffdfc 	bl	0xffff29ec
+ffff31fc:	97fffdfc 	bl	0xffff29ec		; usb_transfer ()
+
 ffff3200:	14000012 	b	0xffff3248
 ffff3204:	7111c45f 	cmp	w2, #0x471
 ffff3208:	540000c1 	b.ne	0xffff3220  // b.any
@@ -4186,21 +4378,25 @@ ffff3224:	39401c20 	ldrb	w0, [x1, #7]
 ffff3228:	39401821 	ldrb	w1, [x1, #6]
 ffff322c:	2a002022 	orr	w2, w1, w0, lsl #8
 ffff3230:	7900da62 	strh	w2, [x19, #0x6c]
-ffff3234:	52800040 	mov	w0, #0x2                   	// #2
-ffff3238:	b9005e60 	str	w0, [x19, #0x5c]
+
+ffff3234:	52800040 	mov	w0, #0x2
+ffff3238:	b9005e60 	str	w0, [x19, #0x5c]	; xfer_code = 2
 ffff323c:	aa1303e0 	mov	x0, x19
 ffff3240:	aa0303e1 	mov	x1, x3
-ffff3244:	94000006 	bl	0xffff325c	; usb_dingus99 ()
+ffff3244:	94000006 	bl	0xffff325c		; usb_xfer4 ()
 ffff3248:	f94007f3 	ldr	x19, [sp, #8]
 ffff324c:	a94157f4 	ldp	x20, x21, [sp, #16]
 ffff3250:	a9427bfd 	ldp	x29, x30, [sp, #32]
 ffff3254:	9100c3ff 	add	sp, sp, #0x30
 ffff3258:	d65f03c0 	ret
 
+# end of usb_xfer3
+
 ; ===============================================
-; subroutine -- usb_dingus99 ()
-; 2 calls from above
-;  one in usb_run (), the other just above in usb_dingus
+
+; subroutine -- usb_xfer4 ( "usb", x, n )
+; 2 calls
+;  one in usb_run (), the other just above in usb_xfer
 
 ffff325c:	d10103ff 	sub	sp, sp, #0x40
 ffff3260:	a9037bfd 	stp	x29, x30, [sp, #48]
@@ -4208,49 +4404,66 @@ ffff3264:	9100c3fd 	add	x29, sp, #0x30
 ffff3268:	a9025ff6 	stp	x22, x23, [sp, #32]
 ffff326c:	a90157f4 	stp	x20, x21, [sp, #16]
 ffff3270:	f90007f3 	str	x19, [sp, #8]
-ffff3274:	aa0103f5 	mov	x21, x1
-ffff3278:	aa0003f3 	mov	x19, x0
+
+; loop
+ffff3274:	aa0103f5 	mov	x21, x1			; x
+ffff3278:	aa0003f3 	mov	x19, x0			; "usb"
 ffff327c:	12003c54 	and	w20, w2, #0xffff
 ffff3280:	340001d4 	cbz	w20, 0xffff32b8
-ffff3284:	f9400aa0 	ldr	x0, [x21, #16]
+
+ffff3284:	f9400aa0 	ldr	x0, [x21, #16]		; x + 16
 ffff3288:	39401401 	ldrb	w1, [x0, #5]
 ffff328c:	39401000 	ldrb	w0, [x0, #4]
 ffff3290:	2a012017 	orr	w23, w0, w1, lsl #8
-ffff3294:	394082a1 	ldrb	w1, [x21, #32]
-ffff3298:	529fffe0 	mov	w0, #0xffff                	// #65535
+ffff3294:	394082a1 	ldrb	w1, [x21, #32]		; x + 32
+ffff3298:	529fffe0 	mov	w0, #0xffff
 ffff329c:	0b2042e0 	add	w0, w23, w0, uxtw
 ffff32a0:	0a140000 	and	w0, w0, w20
-ffff32a4:	34000160 	cbz	w0, 0xffff32d0
+ffff32a4:	34000160 	cbz	w0, 0xffff32d0		; break
 ffff32a8:	12001c20 	and	w0, w1, #0xff
 ffff32ac:	340001e0 	cbz	w0, 0xffff32e8
 ffff32b0:	394082a1 	ldrb	w1, [x21, #32]
-ffff32b4:	14000009 	b	0xffff32d8
-ffff32b8:	f9400e62 	ldr	x2, [x19, #24]
-ffff32bc:	394082a1 	ldrb	w1, [x21, #32]
-ffff32c0:	52800a04 	mov	w4, #0x50                  	// #80
+ffff32b4:	14000009 	b	0xffff32d8		; break
+
+ffff32b8:	f9400e62 	ldr	x2, [x19, #24]		; "usb" + 24
+ffff32bc:	394082a1 	ldrb	w1, [x21, #32]		; x + 32
+ffff32c0:	52800a04 	mov	w4, #0x50		; 80
 ffff32c4:	aa1303e0 	mov	x0, x19
 ffff32c8:	aa1f03e3 	mov	x3, xzr
-ffff32cc:	1400002a 	b	0xffff3374
+ffff32cc:	1400002a 	b	0xffff3374	; loop back
+
 ffff32d0:	12001c20 	and	w0, w1, #0xff
 ffff32d4:	34000260 	cbz	w0, 0xffff3320
+
 ffff32d8:	f9400e62 	ldr	x2, [x19, #24]
 ffff32dc:	52800a04 	mov	w4, #0x50                  	// #80
 ffff32e0:	aa1303e0 	mov	x0, x19
 ffff32e4:	14000015 	b	0xffff3338
+
 ffff32e8:	7101069f 	cmp	w20, #0x41
 ffff32ec:	540002a3 	b.cc	0xffff3340  // b.lo, b.ul, b.last
 ffff32f0:	f9403a60 	ldr	x0, [x19, #0x70]
 ffff32f4:	b9406a61 	ldr	w1, [x19, #0x68]
 ffff32f8:	1ad70a82 	udiv	w2, w20, w23
 ffff32fc:	1b177c56 	mul	w22, w2, w23
-ffff3300:	8b000022 	add	x2, x1, x0
-ffff3304:	52800a04 	mov	w4, #0x50                  	// #80
-ffff3308:	52800025 	mov	w5, #0x1                   	// #1
+
+; A note on the following call.
+; This is the only call to usb_transfer with the final argument of 1
+; This tells usb_transfer to construct the information
+; in the "K" block, then return without doing anything with it
+
+; usb_transfer ( "usb", 0, buf, x22, 0x50, 1 )
+
+ffff3300:	8b000022 	add	x2, x1, x0	; buf
+ffff3304:	52800a04 	mov	w4, #0x50
+ffff3308:	52800025 	mov	w5, #0x1
 ffff330c:	aa1303e0 	mov	x0, x19
 ffff3310:	aa1f03e1 	mov	x1, xzr
 ffff3314:	aa1603e3 	mov	x3, x22
-ffff3318:	97fffdb5 	bl	0xffff29ec
+ffff3318:	97fffdb5 	bl	0xffff29ec		; usb_transfer ()
+
 ffff331c:	1400000a 	b	0xffff3344
+
 ffff3320:	f9403a60 	ldr	x0, [x19, #0x70]
 ffff3324:	b9406a61 	ldr	w1, [x19, #0x68]
 ffff3328:	8b000022 	add	x2, x1, x0
@@ -4258,22 +4471,33 @@ ffff332c:	52800a04 	mov	w4, #0x50                  	// #80
 ffff3330:	aa1303e0 	mov	x0, x19
 ffff3334:	aa1f03e1 	mov	x1, xzr
 ffff3338:	aa1403e3 	mov	x3, x20
-ffff333c:	1400000e 	b	0xffff3374
+ffff333c:	1400000e 	b	0xffff3374		; loop back
+
 ffff3340:	2a1f03f6 	mov	w22, wzr
 ffff3344:	39419660 	ldrb	w0, [x19, #0x65]
 ffff3348:	4b364281 	sub	w1, w20, w22, uxtw
 ffff334c:	0b2142e3 	add	w3, w23, w1, uxtw
 ffff3350:	321f0000 	orr	w0, w0, #0x2
 ffff3354:	39019660 	strb	w0, [x19, #0x65]
-ffff3358:	f9401662 	ldr	x2, [x19, #0x28]
+
+; We expect w1 to be set to the endpoint index
+; so x21 must be pointing to X or Y
+; the argument I denote by "x" gets calculated
+;  no telling yet what the game is
+
+; usb_transfer ( "usb", endpoint-index, L, x, 0x50, 0 )
+
+ffff3358:	f9401662 	ldr	x2, [x19, #0x28]	; L
 ffff335c:	394082a1 	ldrb	w1, [x21, #32]
 ffff3360:	51000460 	sub	w0, w3, #0x1
 ffff3364:	1ad70800 	udiv	w0, w0, w23
 ffff3368:	1b177c03 	mul	w3, w0, w23
-ffff336c:	52800a04 	mov	w4, #0x50                  	// #80
+ffff336c:	52800a04 	mov	w4, #0x50
 ffff3370:	aa1303e0 	mov	x0, x19
 ffff3374:	aa1f03e5 	mov	x5, xzr
-ffff3378:	97fffd9d 	bl	0xffff29ec
+ffff3378:	97fffd9d 	bl	0xffff29ec		; usb_transfer ()
+
+; done
 ffff337c:	f94007f3 	ldr	x19, [sp, #8]
 ffff3380:	a94157f4 	ldp	x20, x21, [sp, #16]
 ffff3384:	a9425ff6 	ldp	x22, x23, [sp, #32]
@@ -4281,13 +4505,18 @@ ffff3388:	a9437bfd 	ldp	x29, x30, [sp, #48]
 ffff338c:	910103ff 	add	sp, sp, #0x40
 ffff3390:	d65f03c0 	ret
 
+# END of usb_xfer3
+
 ; =========================================
+
 ; subroutine -- usb_endpoint_command
 ; arguments:
 ;  x0 - usb structure
-;  x1 - endpoint number
+;  x1 - endpoint index
 ;  x2 - command
 ;  x3 - array of 3 params for endpoint
+;
+; this returns 0 on success, -1 on a timeout
 ;
 ; note the add with shift used here
 ; the shift is applied to the last register before the add
@@ -4300,18 +4529,23 @@ ffff33a4:	f90007f3 	str	x19, [sp, #8]
 
 ffff33a8:	aa0003f3 	mov	x19, x0
 
-; 0xc108
-;  global Tx threshold control
-;
 ; Writes are to 0xc800 ...
 ; which ought to be certain physical endpoint registers
 ; these are oddly interleaved.
-; we have 13 physical endpoints (0 - 12)
+; we room here for 13 endpoints (0 - 12)
 ; calculate base = 0xc800 + 4*n, then:
 ; base + 0 is command param 2
 ; base + 4 is command param 1
 ; base + 8 is command param 0
 ; base + c is command
+;
+; This is curious because we could have 16 IN and 16 OUT,
+; but this limits us to using only 6 IN and 6 OUT and one more
+; also what I now call the "endpoint index" is what we are using
+; where the index is 0,2,4,... for OUT endpoints
+;    and 1,3,5,... for IN endpoints
+; this is how things work with the endpoint enable register
+; and I presume that is how it is here also
 
 ffff33ac:	f9402660 	ldr	x0, [x19, #0x48]	; usb hw
 ffff33b0:	b9400864 	ldr	w4, [x3, #8]		; arg3 + 8 (param 0)
@@ -4358,11 +4592,13 @@ ffff3400:	b8614800 	ldr	w0, [x0, w1, uxtw]
 ffff3404:	53007c34 	lsr	w20, w1, #0
 ffff3408:	36500140 	tbz	w0, #10, 0xffff3430	; bit 10 is 0x400
 
-; set timeout and loop
+; set timeout
 ffff340c:	12803e75 	mov	w21, #0xfffffe0c        ; -500
+; loop
 ffff3410:	110006b5 	add	w21, w21, #0x1
 ffff3414:	12800000 	mov	w0, #0xffffffff		; -1
 ffff3418:	340000f5 	cbz	w21, 0xffff3434
+; the above branch will return -1 if we timeout
 
 ffff341c:	52800020 	mov	w0, #0x1
 ffff3420:	97fff584 	bl	0xfff10a30		; xxdelay(1)
@@ -4380,41 +4616,51 @@ ffff3440:	9100c3ff 	add	sp, sp, #0x30
 ffff3444:	d65f03c0 	ret
 
 ; ========================================================
-; subroutine -- usb_dingus101 ()
+
+; subroutine -- usb_stall ( X/Y, 1, 0 )
 ; 2 calls above
-;  - one in usb_run, the other in usb_dingus
+;  - one in usb_run, the other in usb_xfer
+; the second two arguments are always 1,0 as shown
+; the second argument selects clear or stall.
+;   0 says "clear", but we don't do that
+;   1 says "stall"
+
 ffff3448:	d100c3ff 	sub	sp, sp, #0x30
 ffff344c:	a9027bfd 	stp	x29, x30, [sp, #32]
 ffff3450:	910083fd 	add	x29, sp, #0x20
 ffff3454:	f9000ff3 	str	x19, [sp, #24]
 
-ffff3458:	aa0003f3 	mov	x19, x0
-ffff345c:	f9400660 	ldr	x0, [x19, #8]
+ffff3458:	aa0003f3 	mov	x19, x0			; X/Y
+ffff345c:	f9400660 	ldr	x0, [x19, #8]		; "usb"
 ffff3460:	910023e3 	add	x3, sp, #0x8
 ffff3464:	b900087f 	str	wzr, [x3, #8]
 ffff3468:	f90007ff 	str	xzr, [sp, #8]
-ffff346c:	340001e1 	cbz	w1, 0xffff34a8
-ffff3470:	350000c2 	cbnz	w2, 0xffff3488
+ffff346c:	340001e1 	cbz	w1, 0xffff34a8		; test arg2 (it is 1)
+ffff3470:	350000c2 	cbnz	w2, 0xffff3488		; test arg3 (it is 0)
+
 ffff3474:	39408e61 	ldrb	w1, [x19, #0x23]
 ffff3478:	36000081 	tbz	w1, #0, 0xffff3488
 ffff347c:	39406262 	ldrb	w2, [x19, #24]
 ffff3480:	12800001 	mov	w1, #0xffffffff
 ffff3484:	37200222 	tbnz	w2, #4, 0xffff34c8
-ffff3488:	39408261 	ldrb	w1, [x19, #32]
+
+ffff3488:	39408261 	ldrb	w1, [x19, #32]		; endpoint index
 ffff348c:	910023e3 	add	x3, sp, #0x8
 ffff3490:	52800082 	mov	w2, #0x4		; cmd = 4 (set stall)
-ffff3494:	97ffffc0 	bl	0xffff3394		; usb_endpoint_command
+ffff3494:	97ffffc0 	bl	0xffff3394		; usb_endpoint_command ( "usb", epindex, 4, params )
 ffff3498:	b9401a62 	ldr	w2, [x19, #24]
 ffff349c:	aa0003e1 	mov	x1, x0
 ffff34a0:	321f0040 	orr	w0, w2, #0x2
 ffff34a4:	14000008 	b	0xffff34c4
+
 ffff34a8:	39408261 	ldrb	w1, [x19, #32]
 ffff34ac:	910023e3 	add	x3, sp, #0x8
 ffff34b0:	528000a2 	mov	w2, #0x5		; cmd = 5 (clear stall)
-ffff34b4:	97ffffb8 	bl	0xffff3394		; usb_endpoint_command
+ffff34b4:	97ffffb8 	bl	0xffff3394		; usb_endpoint_command ( "usb", epindex, 5, params )
 ffff34b8:	b9401a62 	ldr	w2, [x19, #24]
 ffff34bc:	aa0003e1 	mov	x1, x0
 ffff34c0:	121d7440 	and	w0, w2, #0xfffffff9
+
 ffff34c4:	b9001a60 	str	w0, [x19, #24]
 
 ffff34c8:	aa0103e0 	mov	x0, x1
@@ -4424,6 +4670,7 @@ ffff34d4:	9100c3ff 	add	sp, sp, #0x30
 ffff34d8:	d65f03c0 	ret
 
 ;  ===================================================
+
 ; usb_start ( usb, 1 )
 ; subroutine, called once during usb initialization
 ; passed x0 as pointer to usb control structure in SRAM
@@ -4492,6 +4739,10 @@ ffff3568:	a9427bfd 	ldp	x29, x30, [sp, #32]
 ffff356c:	9100c3ff 	add	sp, sp, #0x30
 ffff3570:	d65f03c0 	ret
 
+# END of usb_start
+
+; ======================================================================
+
 ; usb_init2 ( usb )
 ; subroutine, called once during usb initialization
 ; passed x0 as pointer to usb control structure in SRAM
@@ -4502,116 +4753,231 @@ ffff357c:	910043fd 	add	x29, sp, #0x10
 ffff3580:	f90007f3 	str	x19, [sp, #8]
 
 ffff3584:	aa0003f3 	mov	x19, x0			; usb struct pointer
+
+; Here is some kind of block at SRAM + 0x200, 6 bytes in size
+; this is used elsewhere (such as in usb_run())
+; call this block "C"
+;
+;  byte 0 = 7
+;  byte 1 = 5
+;  byte 2 = 0
+;  byte 3 = 0
+;  word = 0x40
+
 ffff3588:	b0ffc660 	adrp	x0, 0xff8c0000
 ffff358c:	528000e1 	mov	w1, #0x7
-ffff3590:	39080001 	strb	w1, [x0, #0x200]
+ffff3590:	39080001 	strb	w1, [x0, #0x200]	; write to SRAM + 0x200
 ffff3594:	91080000 	add	x0, x0, #0x200
 ffff3598:	528000a1 	mov	w1, #0x5
-ffff359c:	39000401 	strb	w1, [x0, #1]
-ffff35a0:	3900081f 	strb	wzr, [x0, #2]
-ffff35a4:	39000c1f 	strb	wzr, [x0, #3]
+ffff359c:	39000401 	strb	w1, [x0, #1]		; to SRAM + 0x201
+ffff35a0:	3900081f 	strb	wzr, [x0, #2]		; to SRAM + 0x202
+ffff35a4:	39000c1f 	strb	wzr, [x0, #3]		; to SRAM + 0x203
 ffff35a8:	52800801 	mov	w1, #0x40
-ffff35ac:	79000801 	strh	w1, [x0, #4]
+ffff35ac:	79000801 	strh	w1, [x0, #4]		; to SRAM + 0x204, 205
 
+; we set all this up, but don't store a pointer to this cute bundle of 6 bytes
+; nor do we reference it in this routine anyway.
+
+; now work on device speed
 ffff35b0:	f9402660 	ldr	x0, [x19, #0x48]	; usb hw
-ffff35b4:	b9460000 	ldr	w0, [x0, #0x600]
-ffff35b8:	b9405661 	ldr	w1, [x19, #0x54]
+ffff35b4:	b9460000 	ldr	w0, [x0, #0x600]	; c700 = device config register
+
+; On initialization this will always be 3
+; and we only call this routine on initialization, so ..... ?
+; anyway, if we see the 3, we clear the bottom 3 bits
+; these indicate device speed, and 0 is "high speed"
+
+ffff35b8:	b9405661 	ldr	w1, [x19, #0x54]	; gets 3 (high speed)
 ffff35bc:	121d7000 	and	w0, w0, #0xfffffff8
-ffff35c0:	71000c3f 	cmp	w1, #0x3
-ffff35c4:	54000140 	b.eq	0xffff35ec  // b.none
-ffff35c8:	7100083f 	cmp	w1, #0x2
-ffff35cc:	54000061 	b.ne	0xffff35d8  // b.any
-ffff35d0:	32000400 	orr	w0, w0, #0x3
+
+ffff35c0:	71000c3f 	cmp	w1, #0x3		; did we get 3 ?
+ffff35c4:	54000140 	b.eq	0xffff35ec		; yes !
+
+; None of this should execute in our case, but lets examine it anyway
+
+ffff35c8:	7100083f 	cmp	w1, #0x2		; how about 2
+ffff35cc:	54000061 	b.ne	0xffff35d8		; nope
+
+; if we saw 2, set speed bits to 3, which is undefined  !?
+ffff35d0:	32000400 	orr	w0, w0, #0x3	
 ffff35d4:	14000006 	b	0xffff35ec
-ffff35d8:	7100043f 	cmp	w1, #0x1
-ffff35dc:	54000061 	b.ne	0xffff35e8  // b.any
+
+; not a 2
+ffff35d8:	7100043f 	cmp	w1, #0x1		; how about 1
+ffff35dc:	54000061 	b.ne	0xffff35e8		; nope
+
+; if we saw 1, then set speed bits to 2, which is also undefine  !?
 ffff35e0:	321f0000 	orr	w0, w0, #0x2
 ffff35e4:	14000002 	b	0xffff35ec
+
+; not 1, 2, or 3 -- we give up and set 4, which is super speed
 ffff35e8:	321e0000 	orr	w0, w0, #0x4
+
 ffff35ec:	f9402661 	ldr	x1, [x19, #0x48]	; usb hw
-ffff35f0:	b9060020 	str	w0, [x1, #0x600]
+ffff35f0:	b9060020 	str	w0, [x1, #0x600]	; write to device config reg
+
+; -----------------
+
+; clear bit 0x10 in usb.flags
+
 ffff35f4:	39419660 	ldrb	w0, [x19, #0x65]
 ffff35f8:	52801de1 	mov	w1, #0xef
 ffff35fc:	0a010000 	and	w0, w0, w1
 ffff3600:	39019660 	strb	w0, [x19, #0x65]
 
-ffff3604:	f9401e60 	ldr	x0, [x19, #0x38]
+; X
+ffff3604:	f9401e60 	ldr	x0, [x19, #0x38]	; X
 ffff3608:	aa1f03e1 	mov	x1, xzr
 ffff360c:	94000012 	bl	0xffff3654		; usb_helper(x,0)
 ffff3610:	350001a0 	cbnz	w0, 0xffff3644
-ffff3614:	f9402260 	ldr	x0, [x19, #0x40]
+
+; Y
+ffff3614:	f9402260 	ldr	x0, [x19, #0x40]	; Y
 ffff3618:	aa1f03e1 	mov	x1, xzr
 ffff361c:	9400000e 	bl	0xffff3654		; usb_helper(y,0)
 ffff3620:	35000120 	cbnz	w0, 0xffff3644
+
 ffff3624:	52800020 	mov	w0, #0x1
-ffff3628:	b9005e60 	str	w0, [x19, #0x5c]
+ffff3628:	b9005e60 	str	w0, [x19, #0x5c]	; xfer_code = 1
+
 ffff362c:	aa1303e0 	mov	x0, x19
-ffff3630:	97fffce9 	bl	0xffff29d4		; call odd piece above
+ffff3630:	97fffce9 	bl	0xffff29d4		; usb_transfer_x ( "usb" )
+
+; Here we write 0x1e1f to the usb device event enable register
+; this is (more or less) a 12 bit mask of events that can be enabled
+; from bottom to top, we enable (or disable):
+; 0 - disconnect detected
+; 1 - reset
+; 2 - connect done
+; 3 - link change
+; 4 - wakeup
+; 5 - hibernation (disabled)
+; 6 - L1 L2 suspend (disabled)
+; 7 - SOF (start of frame) (disabled)
+; 8 - xx
+; 9 - erratic error
+; 10, 11 - xx
+; 12 - vendor device test
+
 ffff3634:	f9402661 	ldr	x1, [x19, #0x48]	; usb hw
-ffff3638:	2a1f03e0 	mov	w0, wzr
+ffff3638:	2a1f03e0 	mov	w0, wzr			; return code (ignored)
 ffff363c:	5283c3e2 	mov	w2, #0x1e1f
-ffff3640:	b9060822 	str	w2, [x1, #0x608]
+ffff3640:	b9060822 	str	w2, [x1, #0x608]	; c708 - device event enable
 
 ffff3644:	f94007f3 	ldr	x19, [sp, #8]
 ffff3648:	a9417bfd 	ldp	x29, x30, [sp, #16]
 ffff364c:	910083ff 	add	sp, sp, #0x20
 ffff3650:	d65f03c0 	ret
 
+; END of usb_init2
+
 ; ========================================
+
 ; subroutine -- "usb_helper"
+
+;   a pretty big helper
+
 ; x0 = x or y
-; x1 = 0 or 1
-; The calls with x0 = 0 come first from usb_init2 ()
-; The calls with x0 = 1 come later from usb_run ()
+; x1 = 0 or 1 flag
+
+; The calls with x1 = 0 come first from usb_init2 ()
+; The calls with x1 = 1 come later from usb_run ()
 ;
 ; note that x0 is NOT a pointer to the
-;  USB block as in the above.
+;  USB block as is so often the case.
+;
 ; "x" = usb + 0x38
 ; "y" = usb + 0x40
+;
+; X and Y are blocks of 40 bytes (0x28) size
+; they are set up in usb_mem_setup
+; they are zero with the following exceptions:
+;                 X       Y
+; +  8           usb"   "usb"
+; + 24 (0x18)     0       0   4 bytes
+; + 32 (0x20)     0       1   (byte)		-- endpoint index
+; + 35 (0x23)     0       1   (byte)
 
-ffff3654:	d10183ff 	sub	sp, sp, #0x60
+; Note here on "endpoint index"
+; This is 0 for the EP0-OUT endpoint (which is thus X)
+;     and 1 for the EP0-IN endpoint (which is then Y)
+
+ffff3654:	d10183ff 	sub	sp, sp, #0x60		; prolog
 ffff3658:	a9057bfd 	stp	x29, x30, [sp, #80]
 ffff365c:	910143fd 	add	x29, sp, #0x50
 ffff3660:	a90463f7 	stp	x23, x24, [sp, #64]
 ffff3664:	a9035bf5 	stp	x21, x22, [sp, #48]
 ffff3668:	a90253f3 	stp	x19, x20, [sp, #32]
 
-ffff366c:	aa0003f3 	mov	x19, x0		; x or y
-ffff3670:	f9400674 	ldr	x20, [x19, #8]
+; so x19 points to X or Y
+;    x20 points to "usb"
+;    x21 is our "flag" for 0/1
+ffff366c:	aa0003f3 	mov	x19, x0			; x or y
+ffff3670:	f9400674 	ldr	x20, [x19, #8]		; "usb"
 ffff3674:	39406260 	ldrb	w0, [x19, #24]
-ffff3678:	aa0103f5 	mov	x21, x1
-ffff367c:	36000060 	tbz	w0, #0, 0xffff3688
-ffff3680:	91008276 	add	x22, x19, #0x20
+
+ffff3678:	aa0103f5 	mov	x21, x1			; save flag
+
+; This bit will be zero at initialization
+ffff367c:	36000060 	tbz	w0, #0, 0xffff3688	; test bit in X/Y +24
+
+ffff3680:	91008276 	add	x22, x19, #0x20		; X/Y + 0x20
 ffff3684:	14000019 	b	0xffff36e8
-ffff3688:	910003e0 	mov	x0, sp
-ffff368c:	b900081f 	str	wzr, [x0, #8]
+
+ffff3688:	910003e0 	mov	x0, sp			; 3 words of params
+ffff368c:	b900081f 	str	wzr, [x0, #8]		; 12 bytes of 0
 ffff3690:	f90003ff 	str	xzr, [sp]
-ffff3694:	39408260 	ldrb	w0, [x19, #32]
-ffff3698:	91008276 	add	x22, x19, #0x20
-ffff369c:	7100041f 	cmp	w0, #0x1
-ffff36a0:	54000240 	b.eq	0xffff36e8  // b.none
-ffff36a4:	52800122 	mov	w2, #0x9                   	// #9
+
+ffff3694:	39408260 	ldrb	w0, [x19, #32]		; fetch endpoint index
+ffff3698:	91008276 	add	x22, x19, #0x20		; X/Y + 0x20 (pointer to above)
+
+ffff369c:	7100041f 	cmp	w0, #0x1		; endpoint 1 ?
+ffff36a0:	54000240 	b.eq	0xffff36e8		; yes
+
+; no -- not endpoint 1
+ffff36a4:	52800122 	mov	w2, #0x9
 ffff36a8:	7100081f 	cmp	w0, #0x2
-ffff36ac:	54000143 	b.cc	0xffff36d4  // b.lo, b.ul, b.last
+ffff36ac:	54000143 	b.cc	0xffff36d4		; < 2 so endpoint 0
+
+; endpoint 2 or higher
+;  -- never happens for us
 ffff36b0:	39419680 	ldrb	w0, [x20, #0x65]
-ffff36b4:	52800201 	mov	w1, #0x10                  	// #16
+ffff36b4:	52800201 	mov	w1, #0x10
 ffff36b8:	6a01001f 	tst	w0, w1
-ffff36bc:	1a9f07e1 	cset	w1, ne  // ne = any
+ffff36bc:	1a9f07e1 	cset	w1, ne
 ffff36c0:	37000141 	tbnz	w1, #0, 0xffff36e8
+
+; -- we won't run this code either (for endpoints > 1)
+; get cmd for endpoint
+; we get cmd = 9  with bit 17 set
+; 9 is "start new configuration" and should require no params
+
 ffff36c4:	d0000001 	adrp	x1, 0xffff5000
-ffff36c8:	b9413422 	ldr	w2, [x1, #0x134]	; get cmd for endpoint
+ffff36c8:	b9413422 	ldr	w2, [x1, #0x134]	; ffff5134: 00020009
 ffff36cc:	321c0000 	orr	w0, w0, #0x10
 ffff36d0:	39019680 	strb	w0, [x20, #0x65]
-ffff36d4:	910003e3 	mov	x3, sp			; params
+
+; endpoint 0 (EP0-OUT) comes right here
+; in our case cmd = w2 = 9
+; which is "start new configuration"
+
+ffff36d4:	910003e3 	mov	x3, sp			; params (3 words of 0)
 ffff36d8:	aa1403e0 	mov	x0, x20			; "usb"
-ffff36dc:	aa1f03e1 	mov	x1, xzr			; endpoint 0
-ffff36e0:	97ffff2d 	bl	0xffff3394		; usb_endpoint_command
+ffff36dc:	aa1f03e1 	mov	x1, xzr			; index 0 (EP0-OUT)
+ffff36e0:	97ffff2d 	bl	0xffff3394		; usb_endpoint_command ( "usb", 0, cmd, params )
 ffff36e4:	350007a0 	cbnz	w0, 0xffff37d8
+
+; endpoint 1 (EP0-IN) comes right here
+; apparently we don't need to "start new configuration" for it.
+; but endpoint 0 falls through into this code
+
 ffff36e8:	b90013ff 	str	wzr, [sp, #16]
+
 ffff36ec:	b0ffc660 	adrp	x0, 0xff8c0000
-ffff36f0:	91080017 	add	x23, x0, #0x200
+ffff36f0:	91080017 	add	x23, x0, #0x200		; SRAM + 0x200
+
 ffff36f4:	39400ee1 	ldrb	w1, [x23, #3]
-ffff36f8:	528000c0 	mov	w0, #0x6                   	// #6
+ffff36f8:	528000c0 	mov	w0, #0x6
 ffff36fc:	79400ae2 	ldrh	w2, [x23, #4]
 ffff3700:	0a010400 	and	w0, w0, w1, lsl #1
 ffff3704:	2a020c00 	orr	w0, w0, w2, lsl #3
@@ -4620,26 +4986,31 @@ ffff370c:	710002bf 	cmp	w21, #0x0
 ffff3710:	1a820000 	csel	w0, w0, w2, eq  // eq = none
 ffff3714:	910043e2 	add	x2, sp, #0x10
 ffff3718:	b9000840 	str	w0, [x2, #8]
-ffff371c:	52800063 	mov	w3, #0x3                   	// #3
+ffff371c:	52800063 	mov	w3, #0x3
 ffff3720:	6a03003f 	tst	w1, w3
-ffff3724:	394002c1 	ldrb	w1, [x22]
-ffff3728:	5280e003 	mov	w3, #0x700                 	// #1792
-ffff372c:	5280a004 	mov	w4, #0x500                 	// #1280
+
+; The following fetches our endpoint index from X/Y + 0x20
+ffff3724:	394002c1 	ldrb	w1, [x22]		; endpoint
+
+ffff3728:	5280e003 	mov	w3, #0x700
+ffff372c:	5280a004 	mov	w4, #0x500
 ffff3730:	1a830083 	csel	w3, w4, w3, eq  // eq = none
 ffff3734:	2a016463 	orr	w3, w3, w1, lsl #25
 ffff3738:	b9000443 	str	w3, [x2, #4]
 ffff373c:	39408e63 	ldrb	w3, [x19, #0x23]
 ffff3740:	360000a3 	tbz	w3, #0, 0xffff3754
-ffff3744:	52a01fc3 	mov	w3, #0xfe0000              	// #16646144
+ffff3744:	52a01fc3 	mov	w3, #0xfe0000
 ffff3748:	0a014063 	and	w3, w3, w1, lsl #16
 ffff374c:	2a030000 	orr	w0, w0, w3
 ffff3750:	b9000840 	str	w0, [x2, #8]
 ffff3754:	910043f5 	add	x21, sp, #0x10
+
 ffff3758:	52800022 	mov	w2, #0x1		; cmd = 1 (set endpoint config)
 ffff375c:	aa1403e0 	mov	x0, x20			; "usb"
 ffff3760:	aa1503e3 	mov	x3, x21			; params
-ffff3764:	97ffff0c 	bl	0xffff3394		; usb_endpoint_command
+ffff3764:	97ffff0c 	bl	0xffff3394		; usb_endpoint_command ( "usb", ep_index, 1, params )
 ffff3768:	35000380 	cbnz	w0, 0xffff37d8
+
 ffff376c:	39406260 	ldrb	w0, [x19, #24]
 ffff3770:	36000060 	tbz	w0, #0, 0xffff377c
 ffff3774:	2a1f03e0 	mov	w0, wzr
@@ -4647,12 +5018,14 @@ ffff3778:	14000018 	b	0xffff37d8
 ffff377c:	f9000bff 	str	xzr, [sp, #16]
 ffff3780:	52800038 	mov	w24, #0x1
 ffff3784:	b9000ab8 	str	w24, [x21, #8]
-ffff3788:	394002c1 	ldrb	w1, [x22]
+
+ffff3788:	394002c1 	ldrb	w1, [x22]		; endpoint
 ffff378c:	52800042 	mov	w2, #0x2		; cmd = 2 (set endpoint transfer rate)
 ffff3790:	aa1403e0 	mov	x0, x20			; "usb"
 ffff3794:	aa1503e3 	mov	x3, x21			; params
-ffff3798:	97fffeff 	bl	0xffff3394		; usb_endpoint_command
+ffff3798:	97fffeff 	bl	0xffff3394		; usb_endpoint_command ( "usb", ep_index, 2, params )
 ffff379c:	350001e0 	cbnz	w0, 0xffff37d8
+
 ffff37a0:	f9000a77 	str	x23, [x19, #16]
 ffff37a4:	39400ee0 	ldrb	w0, [x23, #3]
 ffff37a8:	12000400 	and	w0, w0, #0x3
@@ -4660,13 +5033,24 @@ ffff37ac:	39008660 	strb	w0, [x19, #0x21]
 ffff37b0:	b9401a60 	ldr	w0, [x19, #24]
 ffff37b4:	32000000 	orr	w0, w0, #0x1
 ffff37b8:	b9001a60 	str	w0, [x19, #24]
-ffff37bc:	f9402681 	ldr	x1, [x20, #0x48]
+
+; active endpoint enable register
+; We have 32 bits
+; We have 16 IN and 16 OUT endpoints
+; bit 0 is EP0-OUT
+; bit 1 is EP0-IN
+; and so on, up the scale.
+; endpoint indexes 0 and 1 must always be enabled (EP0-IN and EP0-OUT)
+
+ffff37bc:	f9402681 	ldr	x1, [x20, #0x48]	; usb hw
 ffff37c0:	b9462022 	ldr	w2, [x1, #0x620]
-ffff37c4:	394002c3 	ldrb	w3, [x22]
+ffff37c4:	394002c3 	ldrb	w3, [x22]		; get endpoint index
 ffff37c8:	2a1f03e0 	mov	w0, wzr
 ffff37cc:	1ac32303 	lsl	w3, w24, w3
 ffff37d0:	2a020062 	orr	w2, w3, w2
 ffff37d4:	b9062022 	str	w2, [x1, #0x620]
+
+; done
 ffff37d8:	a94253f3 	ldp	x19, x20, [sp, #32]
 ffff37dc:	a9435bf5 	ldp	x21, x22, [sp, #48]
 ffff37e0:	a94463f7 	ldp	x23, x24, [sp, #64]
@@ -4674,7 +5058,12 @@ ffff37e4:	a9457bfd 	ldp	x29, x30, [sp, #80]
 ffff37e8:	910183ff 	add	sp, sp, #0x60
 ffff37ec:	d65f03c0 	ret
 
-; usb_init1 ( usb )
+; END of usb_helper
+
+; =================================================================
+
+; usb_mem_setup ( usb )
+
 ; subroutine, called once during usb initialization
 ; passed x0 as pointer to usb control structure in SRAM
 ; this seems to mostly set up memory.
@@ -4685,8 +5074,9 @@ ffff37f8:	910083fd 	add	x29, sp, #0x20
 ffff37fc:	a90157f4 	stp	x20, x21, [sp, #16]
 ffff3800:	f90007f3 	str	x19, [sp, #8]
 
-ffff3804:	aa0003f3 	mov	x19, x0			; usb block base
+ffff3804:	aa0003f3 	mov	x19, x0			; "usb" block base
 
+; block "J" 64 bytes at SRAM + 0x1c0
 ffff3808:	b0ffc660 	adrp	x0, 0xff8c0000
 ffff380c:	91070000 	add	x0, x0, #0x1c0		; SRAM + 0x1c0
 ffff3810:	f9000260 	str	x0, [x19]
@@ -4695,6 +5085,7 @@ ffff3818:	d2800802 	mov	x2, #0x40
 ffff381c:	aa1f03e1 	mov	x1, xzr
 ffff3820:	94000317 	bl	0xffff447c		; memset ( addr, 0, 0x40 )
 
+; block "K" 32 bytes at SRAM + 0x3f0
 ffff3824:	b0ffc660 	adrp	x0, 0xff8c0000
 ffff3828:	910fc001 	add	x1, x0, #0x3f0		; SRAM + 0x3f0
 ffff382c:	f9000661 	str	x1, [x19, #8]
@@ -4704,6 +5095,7 @@ ffff3838:	f900083f 	str	xzr, [x1, #16]
 ffff383c:	f900043f 	str	xzr, [x1, #8]
 ffff3840:	f901f81f 	str	xzr, [x0, #0x3f0]
 
+; block "L" 64 bytes at SRAM + 0x180
 ffff3844:	b0ffc660 	adrp	x0, 0xff8c0000
 ffff3848:	91060000 	add	x0, x0, #0x180		; SRAM + 0x180
 ffff384c:	f9000a60 	str	x0, [x19, #16]
@@ -4712,55 +5104,74 @@ ffff3854:	d2800802 	mov	x2, #0x40
 ffff3858:	aa1f03e1 	mov	x1, xzr
 ffff385c:	94000308 	bl	0xffff447c		; memset ( addr, 0, 0x40 );
 
+; Here we set up blocks X and Y
+; it appears that these have to do with endpoints
+; each block is 40 bytes in size (0x28)
+; block X is for EP0-OUT   at SRAM + 0x318
+; block Y is for EP0-IN    at SRAM + 0x340
+
 ; setup block X (pointer at usb + 0x38)
 ;  40 bytes in size i.e. 0x28
+; 
 ffff3860:	b0ffc660 	adrp	x0, 0xff8c0000
 ffff3864:	910c6014 	add	x20, x0, #0x318		; SRAM + 0x318
+
 ffff3868:	d2800502 	mov	x2, #0x28		; 40
 ffff386c:	aa1403e0 	mov	x0, x20
 ffff3870:	aa1f03e1 	mov	x1, xzr
 ffff3874:	94000302 	bl	0xffff447c		; memset ( x20, 0, 0x28 )
-ffff3878:	f9000693 	str	x19, [x20, #8]
-ffff387c:	3900829f 	strb	wzr, [x20, #32]
-ffff3880:	39008e9f 	strb	wzr, [x20, #0x23]
+
+ffff3878:	f9000693 	str	x19, [x20, #8]		; "usb"
+ffff387c:	3900829f 	strb	wzr, [x20, #32]		; 0 (endpoint index, EP0-OUT)
+ffff3880:	39008e9f 	strb	wzr, [x20, #0x23]	; 0
 ffff3884:	b9001a9f 	str	wzr, [x20, #24]
 ffff3888:	f9001e74 	str	x20, [x19, #0x38]	; pointer to X
 
 ; setup block Y (pointer at usb + 0x40)
+;
 ; Note that this immediately follows X,
 ; we just add 0x28 (40) to the X base value
 ;  also 40 bytes in size i.e. 0x28
 ; Oddly, just as above, this initializes stuff in the block,
 ;  but via offsets from the pointer to the X block
-ffff388c:	9100a295 	add	x21, x20, #0x28
+ffff388c:	9100a295 	add	x21, x20, #0x28		; SRAM + 0x340
+
 ffff3890:	d2800502 	mov	x2, #0x28		; 40
 ffff3894:	aa1503e0 	mov	x0, x21
 ffff3898:	aa1f03e1 	mov	x1, xzr
 ffff389c:	940002f8 	bl	0xffff447c		; memset ( x21, 0, 0x28 )
-ffff38a0:	f9001a93 	str	x19, [x20, #0x30]
+
+ffff38a0:	f9001a93 	str	x19, [x20, #0x30]	; at 8  = "usb"
 ffff38a4:	52800020 	mov	w0, #0x1
-ffff38a8:	39012280 	strb	w0, [x20, #0x48]
-ffff38ac:	39012e80 	strb	w0, [x20, #0x4b]
-ffff38b0:	b900429f 	str	wzr, [x20, #0x40]
+ffff38a8:	39012280 	strb	w0, [x20, #0x48]	; at 32 = 1 (endpoint index, EP0-IN)
+ffff38ac:	39012e80 	strb	w0, [x20, #0x4b]	; at 35 = 1
+ffff38b0:	b900429f 	str	wzr, [x20, #0x40]	; at 24, i.e. 0x18
 ffff38b4:	f9002275 	str	x21, [x19, #0x40]	; pointer to Y
 
+; A note here on the endpoint index.  Why write it twice, and as a byte nonetheless?
+; note that each write is done as a byte.  Stay on your toes.
+
+; done
 ffff38b8:	f94007f3 	ldr	x19, [sp, #8]
 ffff38bc:	a94157f4 	ldp	x20, x21, [sp, #16]
 ffff38c0:	a9427bfd 	ldp	x29, x30, [sp, #32]
 ffff38c4:	9100c3ff 	add	sp, sp, #0x30
 ffff38c8:	d65f03c0 	ret
 
+; END of usb_mem_setup
+
 ;  =======================================================
 ;  =======================================================
 ;  =======================================================
 
 ; subroutine -- "usb_run"
+
 ; one call, surrounded by a spin loop, i.e. once we decide that
 ; we are doing the usb bootloader thing, we run this forever
-; we get no arguments
+;  -- no arguments
 ;
-; This must be hand coded, no compiler would have generated this.
-; It has some classic tangled "spaghetti code"
+; This must be hand coded.
+; No compiler would have generated this mess.
 
 ffff38cc:	d10203ff 	sub	sp, sp, #0x80
 ffff38d0:	a9077bfd 	stp	x29, x30, [sp, #112]
@@ -4784,19 +5195,24 @@ ffff38f4:	f9402660 	ldr	x0, [x19, #0x48]	; usb hw base
 
 ; This reads the global event buffer count
 ; a 16 bit value with the count in bytes
+; if it is zero, we have nothing to do.
+
 ffff38f8:	b9430c00 	ldr	w0, [x0, #0x30c]
 ffff38fc:	121e3400 	and	w0, w0, #0xfffc
 ffff3900:	34001200 	cbz	w0, 0xffff3b40		; return if zero
 
-ffff3904:	b0ffc675 	adrp	x21, 0xff8c0000
-ffff3908:	911042b4 	add	x20, x21, #0x410	; SRAM + 0x410
-ffff390c:	b9001280 	str	w0, [x20, #16]
-ffff3910:	b9401680 	ldr	w0, [x20, #20]
-ffff3914:	f9402661 	ldr	x1, [x19, #0x48]	; usb hw base
-ffff3918:	32000000 	orr	w0, w0, #0x1
-ffff391c:	b9001680 	str	w0, [x20, #20]
+; non-zero, something to do
 
-; 0xc308 - global event buffer size
+ffff3904:	b0ffc675 	adrp	x21, 0xff8c0000
+ffff3908:	911042b4 	add	x20, x21, #0x410	; SRAM + 0x410 "A"
+
+ffff390c:	b9001280 	str	w0, [x20, #16]		; A+0x10 = event buffer count
+ffff3910:	b9401680 	ldr	w0, [x20, #20]		; read A+20
+ffff3914:	f9402661 	ldr	x1, [x19, #0x48]	; usb hw base -- fe80c100
+ffff3918:	32000000 	orr	w0, w0, #0x1
+ffff391c:	b9001680 	str	w0, [x20, #20]		; (A + 20) |= 1
+
+; 0xc408 - global event buffer size
 ; top bit is event interrupt mask
 ; setting 1 prevents an interrupt
 ; but events are still queued
@@ -4804,19 +5220,23 @@ ffff3920:	b9430820 	ldr	w0, [x1, #0x308]
 ffff3924:	32010000 	orr	w0, w0, #0x80000000
 ffff3928:	b9030820 	str	w0, [x1, #0x308]
 
-ffff392c:	91004280 	add	x0, x20, #0x10
-ffff3930:	b9400400 	ldr	w0, [x0, #4]
+ffff392c:	91004280 	add	x0, x20, #0x10		; x0 = A + 0x10
+ffff3930:	b9400400 	ldr	w0, [x0, #4]		; w0 = A + 0x14
 ffff3934:	36001060 	tbz	w0, #0, 0xffff3b40	; return if zero
-ffff3938:	b9401296 	ldr	w22, [x20, #16]
+
+; fetch event buffer count again
+ffff3938:	b9401296 	ldr	w22, [x20, #16]		; w22 = A + 0x10
 ffff393c:	710006df 	cmp	w22, #0x1
 ffff3940:	54000f2b 	b.lt	0xffff3b24
+
 ffff3944:	52800097 	mov	w23, #0x4
 ffff3948:	12a3e098 	mov	w24, #0xe0fbffff            	// #-520355841
 ffff394c:	528019bc 	mov	w28, #0xcd                  	// #205
 ffff3950:	528000ba 	mov	w26, #0x5
-ffff3954:	1282801b 	mov	w27, #0xffffebff            	// #-5121
+ffff3954:	1282801b 	mov	w27, #0xffffebff	; will modify dctrl
 ffff3958:	52801cf9 	mov	w25, #0xe7                  	// #231
-ffff395c:	14000009 	b	0xffff3980
+
+ffff395c:	14000009 	b	0xffff3980		; enter big loop below
 
 ; branch from below when full speed is detected
 ffff3960:	f9402660 	ldr	x0, [x19, #0x48]
@@ -4831,7 +5251,7 @@ ffff3974:	b9460401 	ldr	w1, [x0, #0x604]	; USB dctrl
 ffff3978:	12036821 	and	w1, w1, #0xe0ffffff
 ffff397c:	14000058 	b	0xffff3adc
 
-; branches here from 2 places
+; big loop from below (ffff3b1c)
 ffff3980:	f9420aa0 	ldr	x0, [x21, #0x410]	; area "A"
 ffff3984:	b9400e81 	ldr	w1, [x20, #12]		; "A" + 12
 ffff3988:	b8616800 	ldr	w0, [x0, x1]
@@ -4840,7 +5260,7 @@ ffff3990:	37000180 	tbnz	w0, #0, 0xffff39c0
 
 ffff3994:	53011400 	ubfx	w0, w0, #1, #5
 ffff3998:	8b204e61 	add	x1, x19, w0, uxtw #3
-ffff399c:	f9401c21 	ldr	x1, [x1, #0x38]
+ffff399c:	f9401c21 	ldr	x1, [x1, #0x38]		; X ?
 ffff39a0:	b9401821 	ldr	w1, [x1, #24]
 ffff39a4:	36000ac1 	tbz	w1, #0, 0xffff3afc
 ffff39a8:	7100041f 	cmp	w0, #0x1
@@ -4848,7 +5268,7 @@ ffff39ac:	54000a88 	b.hi	0xffff3afc
 ffff39b0:	910023e1 	add	x1, sp, #0x8
 ffff39b4:	aa1303e0 	mov	x0, x19
 
-ffff39b8:	97fffc5c 	bl	0xffff2b28		; usb_dingus()
+ffff39b8:	97fffc5c 	bl	0xffff2b28		; usb_xfer()
 ffff39bc:	14000050 	b	0xffff3afc
 
 ; branch from above
@@ -4876,10 +5296,10 @@ ffff3a00:	b9001801 	str	w1, [x0, #24]
 ffff3a04:	910043e3 	add	x3, sp, #0x10
 ffff3a08:	b900087f 	str	wzr, [x3, #8]
 ffff3a0c:	f9000bff 	str	xzr, [sp, #16]
-ffff3a10:	39408001 	ldrb	w1, [x0, #32]		; select endpoint
+ffff3a10:	39408001 	ldrb	w1, [x0, #32]		; get endpoint index
 ffff3a14:	528000a2 	mov	w2, #0x5		; cmd = 5 (clear stall)
 ffff3a18:	aa1303e0 	mov	x0, x19			; "usb"
-ffff3a1c:	97fffe5e 	bl	0xffff3394		; usb_endpoint_command
+ffff3a1c:	97fffe5e 	bl	0xffff3394		; usb_endpoint_command ( "usb", ep_index, 5, params )
 ffff3a20:	39419660 	ldrb	w0, [x19, #0x65]
 ffff3a24:	0a1c0000 	and	w0, w0, w28
 ffff3a28:	39019660 	strb	w0, [x19, #0x65]
@@ -4910,7 +5330,8 @@ ffff3a50:	39019261 	strb	w1, [x19, #0x64]
 ; immediately following.
 
 ; This is testing the connected speed from the status read above
-ffff3a54:	53007c20 	lsr	w0, w1, #0		; shift by 0 ?!
+
+ffff3a54:	53007c20 	lsr	w0, w1, #0		; w0 = w1
 ffff3a58:	7100103f 	cmp	w1, #0x4
 ffff3a5c:	54000328 	b.hi	0xffff3ac0		; allow 0 .. 4
 ffff3a60:	b0000001 	adrp	x1, 0xffff4000
@@ -4932,13 +5353,24 @@ ffff3a7c:	14000010 	b	0xffff3abc
 
 ; branched to from above
 ffff3a80:	350003e0 	cbnz	w0, 0xffff3afc
-ffff3a84:	f9402660 	ldr	x0, [x19, #0x48]
+
+; c704 is the device control register
+;  we clear bit 10 - INITu1ENA
+
+ffff3a84:	f9402660 	ldr	x0, [x19, #0x48]	; usb hw base
 ffff3a88:	b9460401 	ldr	w1, [x0, #0x604]	; USB dctrl
 ffff3a8c:	12157822 	and	w2, w1, #0xfffffbff
 ffff3a90:	b9060402 	str	w2, [x0, #0x604]	; USB dctrl
-ffff3a94:	f9402660 	ldr	x0, [x19, #0x48]
+
+; w27 is fffebff = 1110_1011_1111_1111
+; so it will clear bits 10 and 12
+; we already did bit 10 above, so why do it again?
+; bit 12 is INITu2ENA
+
+ffff3a94:	f9402660 	ldr	x0, [x19, #0x48]	; usb hw base
 ffff3a98:	0a1b0021 	and	w1, w1, w27
 ffff3a9c:	b9060401 	str	w1, [x0, #0x604]	; USB dctrl
+
 ffff3aa0:	39419660 	ldrb	w0, [x19, #0x65]
 ffff3aa4:	0a190000 	and	w0, w0, w25
 ffff3aa8:	39019660 	strb	w0, [x19, #0x65]
@@ -4961,16 +5393,16 @@ ffff3ad0:	f9402660 	ldr	x0, [x19, #0x48]
 
 ffff3ad4:	b9460401 	ldr	w1, [x0, #0x604]	; USB dctrl
 ffff3ad8:	0a180021 	and	w1, w1, w24
-
 ffff3adc:	b9060401 	str	w1, [x0, #0x604]	; USB dctrl
 
-ffff3ae0:	f9401e60 	ldr	x0, [x19, #0x38]
+ffff3ae0:	f9401e60 	ldr	x0, [x19, #0x38]	; X (EP0-OUT)
 ffff3ae4:	52800021 	mov	w1, #0x1
 ffff3ae8:	97fffedb 	bl	0xffff3654		; usb_helper(x,1)
 ffff3aec:	35000080 	cbnz	w0, 0xffff3afc
-ffff3af0:	f9402260 	ldr	x0, [x19, #0x40]
+ffff3af0:	f9402260 	ldr	x0, [x19, #0x40]	; Y (EP0-IN)
 ffff3af4:	52800021 	mov	w1, #0x1
 ffff3af8:	97fffed7 	bl	0xffff3654		; usb_helper(y,1)
+; fall through
 
 ; Many places branch here from above
 ffff3afc:	b9400e80 	ldr	w0, [x20, #12]
@@ -4978,17 +5410,24 @@ ffff3b00:	11001000 	add	w0, w0, #0x4
 ffff3b04:	12001c00 	and	w0, w0, #0xff
 ffff3b08:	f9402661 	ldr	x1, [x19, #0x48]
 ffff3b0c:	b9000e80 	str	w0, [x20, #12]
-ffff3b10:	510012d6 	sub	w22, w22, #0x4
+ffff3b10:	510012d6 	sub	w22, w22, #0x4		; w22 -= 4
 ffff3b14:	b9030c37 	str	w23, [x1, #0x30c]
 ffff3b18:	710002df 	cmp	w22, #0x0
-ffff3b1c:	54fff32c 	b.gt	0xffff3980		; back up we go
+ffff3b1c:	54fff32c 	b.gt	0xffff3980		; loop back if w22 > 0
 
 ; we are done, wrap up
 ffff3b20:	b9401680 	ldr	w0, [x20, #20]
-ffff3b24:	f9402661 	ldr	x1, [x19, #0x48]
+
+ffff3b24:	f9402661 	ldr	x1, [x19, #0x48]	; usb hw
 ffff3b28:	b900129f 	str	wzr, [x20, #16]
 ffff3b2c:	121f7800 	and	w0, w0, #0xfffffffe
 ffff3b30:	b9001680 	str	w0, [x20, #20]
+
+; 0xc408 - global event buffer size
+; top bit is event interrupt mask
+; clear the bit that prevents interrupts
+;  (why do this?  We don't take interrupts.  Or do we?
+
 ffff3b34:	b9430820 	ldr	w0, [x1, #0x308]
 ffff3b38:	12007800 	and	w0, w0, #0x7fffffff
 ffff3b3c:	b9030820 	str	w0, [x1, #0x308]
@@ -5003,59 +5442,87 @@ ffff3b54:	a9477bfd 	ldp	x29, x30, [sp, #112]
 ffff3b58:	910203ff 	add	sp, sp, #0x80
 ffff3b5c:	d65f03c0 	ret
 
-; subroutine
+# END of usb_run
+
+; ========================================================
+; subroutine - called from only one place below
+; verify ( buf, n )
+
 ffff3b60:	d100c3ff 	sub	sp, sp, #0x30
 ffff3b64:	a9027bfd 	stp	x29, x30, [sp, #32]
 ffff3b68:	910083fd 	add	x29, sp, #0x20
 ffff3b6c:	a90157f4 	stp	x20, x21, [sp, #16]
 ffff3b70:	f90007f3 	str	x19, [sp, #8]
-ffff3b74:	aa0003f3 	mov	x19, x0
-ffff3b78:	51000834 	sub	w20, w1, #0x2
+
+; get 2 byte object from the end of the buffer
+; take care that it may not be nicely aligned
+; put the object into w21
+ffff3b74:	aa0003f3 	mov	x19, x0			; a
+ffff3b78:	51000834 	sub	w20, w1, #0x2		; b - 2
 ffff3b7c:	38744a60 	ldrb	w0, [x19, w20, uxtw]
-ffff3b80:	51000421 	sub	w1, w1, #0x1
+ffff3b80:	51000421 	sub	w1, w1, #0x1		; b--
 ffff3b84:	38614a61 	ldrb	w1, [x19, w1, uxtw]
 ffff3b88:	2a002035 	orr	w21, w1, w0, lsl #8
-ffff3b8c:	aa1303e0 	mov	x0, x19
-ffff3b90:	aa1403e1 	mov	x1, x20
-ffff3b94:	9400007c 	bl	0xffff3d84
+
+ffff3b8c:	aa1303e0 	mov	x0, x19		; buf
+ffff3b90:	aa1403e1 	mov	x1, x20		; count
+ffff3b94:	9400007c 	bl	0xffff3d84	; cksum ( buf, count )
 ffff3b98:	aa0003e1 	mov	x1, x0
-ffff3b9c:	52800020 	mov	w0, #0x1                   	// #1
+ffff3b9c:	52800020 	mov	w0, #0x1
 ffff3ba0:	6b2122bf 	cmp	w21, w1, uxth
-ffff3ba4:	540000a1 	b.ne	0xffff3bb8  // b.any
+ffff3ba4:	540000a1 	b.ne	0xffff3bb8		; return 1
+
+; the above verifies that the checksum matches what is
+; in the last 2 bytes of the buffer, so now we do
+; something with it.
+
 ffff3ba8:	aa1303e0 	mov	x0, x19
 ffff3bac:	aa1403e1 	mov	x1, x20
-ffff3bb0:	9400008a 	bl	0xffff3dd8
-ffff3bb4:	2a1f03e0 	mov	w0, wzr
+ffff3bb0:	9400008a 	bl	0xffff3dd8	; uncrypt ( buf, count )
+ffff3bb4:	2a1f03e0 	mov	w0, wzr		; return 0
+
+; done
 ffff3bb8:	f94007f3 	ldr	x19, [sp, #8]
 ffff3bbc:	a94157f4 	ldp	x20, x21, [sp, #16]
 ffff3bc0:	a9427bfd 	ldp	x29, x30, [sp, #32]
 ffff3bc4:	9100c3ff 	add	sp, sp, #0x30
 ffff3bc8:	d65f03c0 	ret
 
-; subroutine - 1 call
+; END of verify ()
+
+; ============================================
+; subroutine - usb_try_run ()
+;  - 1 call from usb_xfer()
+; this will run loaded code eventually
+
 ffff3bcc:	d100c3ff 	sub	sp, sp, #0x30
 ffff3bd0:	a9027bfd 	stp	x29, x30, [sp, #32]
 ffff3bd4:	910083fd 	add	x29, sp, #0x20
 ffff3bd8:	a90157f4 	stp	x20, x21, [sp, #16]
 ffff3bdc:	f90007f3 	str	x19, [sp, #8]
-ffff3be0:	aa0103f3 	mov	x19, x1
+
+ffff3be0:	aa0103f3 	mov	x19, x1			; buf
 ffff3be4:	aa0003f5 	mov	x21, x0
 ffff3be8:	12002c40 	and	w0, w2, #0xfff
 ffff3bec:	7100041f 	cmp	w0, #0x1
 ffff3bf0:	1a9f17e0 	cset	w0, eq  // eq = none
 ffff3bf4:	12000000 	and	w0, w0, #0x1
 ffff3bf8:	4b204054 	sub	w20, w2, w0, uxtw
-ffff3bfc:	aa1303e0 	mov	x0, x19
-ffff3c00:	aa1403e1 	mov	x1, x20
-ffff3c04:	97ffffd7 	bl	0xffff3b60
-ffff3c08:	35000940 	cbnz	w0, 0xffff3d30
+
+; Note that verify also calls uncrypt()
+ffff3bfc:	aa1303e0 	mov	x0, x19			; buf
+ffff3c00:	aa1403e1 	mov	x1, x20			; count
+ffff3c04:	97ffffd7 	bl	0xffff3b60		; verify ( buf, count )
+ffff3c08:	35000940 	cbnz	w0, 0xffff3d30		; return if it failed
+
 ffff3c0c:	b0ffc660 	adrp	x0, 0xff8c0000
-ffff3c10:	52800141 	mov	w1, #0xa                   	// #10
-ffff3c14:	b9001001 	str	w1, [x0, #16]
+ffff3c10:	52800141 	mov	w1, #0xa
+ffff3c14:	b9001001 	str	w1, [x0, #16]		; SRAM + 16 = 0xa
+
 ffff3c18:	51000a94 	sub	w20, w20, #0x2
 ffff3c1c:	12003ea0 	and	w0, w21, #0xffff
 ffff3c20:	7111c41f 	cmp	w0, #0x471
-ffff3c24:	540002c1 	b.ne	0xffff3c7c  // b.any
+ffff3c24:	540002c1 	b.ne	0xffff3c7c
 ffff3c28:	b0ffc660 	adrp	x0, 0xff8c0000
 ffff3c2c:	b9400c02 	ldr	w2, [x0, #12]
 ffff3c30:	b9400260 	ldr	w0, [x19]
@@ -5063,73 +5530,102 @@ ffff3c34:	b0000001 	adrp	x1, 0xffff4000
 ffff3c38:	912e1021 	add	x1, x1, #0xb84
 ffff3c3c:	b9400021 	ldr	w1, [x1]
 ffff3c40:	34000462 	cbz	w2, 0xffff3ccc
+
 ffff3c44:	6b21401f 	cmp	w0, w1, uxtw
 ffff3c48:	54000481 	b.ne	0xffff3cd8  // b.any
 ffff3c4c:	aa1303e0 	mov	x0, x19
 ffff3c50:	97fff19f 	bl	0xffff02cc
-ffff3c54:	350006e0 	cbnz	w0, 0xffff3d30
+ffff3c54:	350006e0 	cbnz	w0, 0xffff3d30		; return if nz
 ffff3c58:	b0ffc660 	adrp	x0, 0xff8c0000
-ffff3c5c:	52800021 	mov	w1, #0x1                   	// #1
+ffff3c5c:	52800021 	mov	w1, #0x1
 ffff3c60:	b9003001 	str	w1, [x0, #0x30]
 ffff3c64:	910c8261 	add	x1, x19, #0x320
 ffff3c68:	b0ffc660 	adrp	x0, 0xff8c0000
 ffff3c6c:	9100d000 	add	x0, x0, #0x34
 ffff3c70:	d2800882 	mov	x2, #0x44                  	// #68
-ffff3c74:	940001f7 	bl	0xffff4450	; memcpy
-ffff3c78:	1400002e 	b	0xffff3d30
+ffff3c74:	940001f7 	bl	0xffff4450	; memcpy ( SRAM + 0x34, x19 + 0x320, 0x44 )
+ffff3c78:	1400002e 	b	0xffff3d30	; return
+
 ffff3c7c:	7111c81f 	cmp	w0, #0x472
-ffff3c80:	54000581 	b.ne	0xffff3d30  // b.any
+ffff3c80:	54000581 	b.ne	0xffff3d30	; return unless 0
 ffff3c84:	b0ffc660 	adrp	x0, 0xff8c0000
-ffff3c88:	b9400c00 	ldr	w0, [x0, #12]
+ffff3c88:	b9400c00 	ldr	w0, [x0, #12]	; SRAM + 12
 ffff3c8c:	340001c0 	cbz	w0, 0xffff3cc4
+
 ffff3c90:	b0ffc675 	adrp	x21, 0xff8c0000
-ffff3c94:	b94032a0 	ldr	w0, [x21, #0x30]
-ffff3c98:	340004c0 	cbz	w0, 0xffff3d30
+ffff3c94:	b94032a0 	ldr	w0, [x21, #0x30]	; SRAM + 0x30
+ffff3c98:	340004c0 	cbz	w0, 0xffff3d30		; return if 0
 ffff3c9c:	aa1403e0 	mov	x0, x20
-ffff3ca0:	97fff20d 	bl	0xffff04d4		; crypto1
+ffff3ca0:	97fff20d 	bl	0xffff04d4		; crypto1 ( x20 )
 ffff3ca4:	aa1303e0 	mov	x0, x19
 ffff3ca8:	aa1403e1 	mov	x1, x20
-ffff3cac:	97fff21e 	bl	0xffff0524		; crypto2
+ffff3cac:	97fff21e 	bl	0xffff0524		; crypto2 ( x19, x20 )
 ffff3cb0:	b0ffc660 	adrp	x0, 0xff8c0000
 ffff3cb4:	9100d000 	add	x0, x0, #0x34
 ffff3cb8:	91009000 	add	x0, x0, #0x24
-ffff3cbc:	97fff23f 	bl	0xffff05b8		; crypto4
+ffff3cbc:	97fff23f 	bl	0xffff05b8		; crypto4 ( SRAM + 0x34 + 0x24 )
 ffff3cc0:	35000240 	cbnz	w0, 0xffff3d08
+
 ffff3cc4:	d63f0260 	blr	x19
-ffff3cc8:	1400001a 	b	0xffff3d30
+ffff3cc8:	1400001a 	b	0xffff3d30		; return
+
 ffff3ccc:	6b21401f 	cmp	w0, w1, uxtw
-ffff3cd0:	54000300 	b.eq	0xffff3d30  // b.none
+ffff3cd0:	54000300 	b.eq	0xffff3d30		; return if equal
+
+; This goes to run what we have
 ffff3cd4:	14000010 	b	0xffff3d14
+
 ffff3cd8:	b0ffc675 	adrp	x21, 0xff8c0000
-ffff3cdc:	b94032a0 	ldr	w0, [x21, #0x30]
-ffff3ce0:	34000280 	cbz	w0, 0xffff3d30
+ffff3cdc:	b94032a0 	ldr	w0, [x21, #0x30]	; SRAM + 0x30
+ffff3ce0:	34000280 	cbz	w0, 0xffff3d30		; return if 0
 ffff3ce4:	aa1403e0 	mov	x0, x20
-ffff3ce8:	97fff1fb 	bl	0xffff04d4		; crypto1
+ffff3ce8:	97fff1fb 	bl	0xffff04d4		; crypto1 ( x20 )
 ffff3cec:	aa1303e0 	mov	x0, x19
 ffff3cf0:	aa1403e1 	mov	x1, x20
-ffff3cf4:	97fff20c 	bl	0xffff0524		; crypto2
+ffff3cf4:	97fff20c 	bl	0xffff0524		; crypto2 ( x19, x20 )
 ffff3cf8:	b0ffc660 	adrp	x0, 0xff8c0000
 ffff3cfc:	9100d000 	add	x0, x0, #0x34
-ffff3d00:	97fff22e 	bl	0xffff05b8		; crypto4
+ffff3d00:	97fff22e 	bl	0xffff05b8		; crypto4 ( SRAM + 0x34 )
 ffff3d04:	34000060 	cbz	w0, 0xffff3d10
+
 ffff3d08:	b90032bf 	str	wzr, [x21, #0x30]
-ffff3d0c:	14000009 	b	0xffff3d30
+ffff3d0c:	14000009 	b	0xffff3d30		; return
+
+; The following fetches from this:
+;       ffff4e68:	524b 3333 5253 414b           "RK33RSAK"
+; We are only interested in the first 4 bytes -- "RK33"
+
 ffff3d10:	b9400260 	ldr	w0, [x19]
 ffff3d14:	b0000001 	adrp	x1, 0xffff4000
 ffff3d18:	9139a021 	add	x1, x1, #0xe68
-ffff3d1c:	b9400021 	ldr	w1, [x1]
+ffff3d1c:	b9400021 	ldr	w1, [x1]	; RK33
+
+; We set x2 to point just after what we hope is the "RK33"
+; magic word.  Then we check it.
+; If it matches, x2 goes into x0 and we go there
+; If it does not match, we don't mind its absence
+; and just go directly to the start of the image.
+
 ffff3d20:	91001262 	add	x2, x19, #0x4
 ffff3d24:	6b21401f 	cmp	w0, w1, uxtw
 ffff3d28:	9a930040 	csel	x0, x2, x19, eq  // eq = none
 ffff3d2c:	d63f0000 	blr	x0
+
+; done (but we won't fall through to here)
 ffff3d30:	f94007f3 	ldr	x19, [sp, #8]
 ffff3d34:	a94157f4 	ldp	x20, x21, [sp, #16]
 ffff3d38:	a9427bfd 	ldp	x29, x30, [sp, #32]
 ffff3d3c:	9100c3ff 	add	sp, sp, #0x30
 ffff3d40:	d65f03c0 	ret
 
+; ========= END of usb_run()
+
 ; =================================
+
 ; subroutine "usb_spin"
+
+; The bootrom comes here once and forever if other methods
+; of booting fail.
 
 ffff3d44:	d10043ff 	sub	sp, sp, #0x10
 ffff3d48:	a9007bfd 	stp	x29, x30, [sp]
@@ -5139,6 +5635,7 @@ ffff3d50:	b0ffc660 	adrp	x0, 0xff8c0000
 ffff3d54:	b900301f 	str	wzr, [x0, #0x30]	; SRAM + 0x30
 
 ffff3d58:	97fff389 	bl	0xffff0b7c		; CRU, cpu clocks
+
 ffff3d5c:	97fffa97 	bl	0xffff27b8		; usb_init ()
 
 ffff3d60:	97fffedb 	bl	0xffff38cc		; usb_run ()
@@ -5149,6 +5646,7 @@ ffff3d64:	17ffffff 	b	0xffff3d60	; spin calling the above
 ; Called from an interesting spot above that
 ;  seems to have no path to it.
 ;  If that is true, this will never get called.
+;  looks like orphaned dead wood code from olden days
 
 ffff3d68:	d10043ff 	sub	sp, sp, #0x10
 ffff3d6c:	a9007bfd 	stp	x29, x30, [sp]
@@ -5158,13 +5656,21 @@ ffff3d74:	b0ffc660 	adrp	x0, 0xff8c0000
 ffff3d78:	b9000c1f 	str	wzr, [x0, #12]
 ffff3d7c:	97fff1a3 	bl	0xffff0408
 ffff3d80:	97fffff1 	bl	0xffff3d44		; usb_spin
-ffff3d84:	aa0003e2 	mov	x2, x0
-ffff3d88:	529fffe0 	mov	w0, #0xffff                	// #65535
-ffff3d8c:	34000241 	cbz	w1, 0xffff3dd4
+
+;  ========================================================================
+; One call to this,  enters right here
+; cksum ( buf, n )
+;
+; looks to me like it generates some kind of checksum
+
+ffff3d84:	aa0003e2 	mov	x2, x0		; buf
+ffff3d88:	529fffe0 	mov	w0, #0xffff
+ffff3d8c:	34000241 	cbz	w1, 0xffff3dd4	; return if n == 0
+
 ffff3d90:	52820423 	mov	w3, #0x1021                	// #4129
 ffff3d94:	52900004 	mov	w4, #0x8000                	// #32768
 
-ffff3d98:	39400045 	ldrb	w5, [x2]
+ffff3d98:	39400045 	ldrb	w5, [x2]	; w5 = *buf
 ffff3d9c:	52801006 	mov	w6, #0x80                  	// #128
 ffff3da0:	321f3fe7 	mov	w7, #0x1fffe               	// #131070
 ffff3da4:	0a0004e7 	and	w7, w7, w0, lsl #1
@@ -5175,52 +5681,140 @@ ffff3db4:	4a030007 	eor	w7, w0, w3
 ffff3db8:	6a0600bf 	tst	w5, w6
 ffff3dbc:	1a870000 	csel	w0, w0, w7, eq  // eq = none
 ffff3dc0:	13017cc6 	asr	w6, w6, #1
-ffff3dc4:	35fffee6 	cbnz	w6, 0xffff3da0
-ffff3dc8:	51000421 	sub	w1, w1, #0x1
-ffff3dcc:	91000442 	add	x2, x2, #0x1
-ffff3dd0:	35fffe41 	cbnz	w1, 0xffff3d98
+ffff3dc4:	35fffee6 	cbnz	w6, 0xffff3da0		; loop
+
+ffff3dc8:	51000421 	sub	w1, w1, #0x1		; n--
+ffff3dcc:	91000442 	add	x2, x2, #0x1		; buf++
+ffff3dd0:	35fffe41 	cbnz	w1, 0xffff3d98		; loop
+
 ffff3dd4:	d65f03c0 	ret
 
-; subroutine
+; =====================================================
+
+; subroutine uncrypt ( buf, n )
 ; Called from several places
+; -- no prolog
 ; w1 is a count (typically 0x200)
 ; x0 is some address
-ffff3dd8:	aa1f03e3 	mov	x3, xzr
-ffff3ddc:	b0000002 	adrp	x2, 0xffff4000
-ffff3de0:	9131a044 	add	x4, x2, #0xc68		; ffff4c68: 00000000 62987d7a
 
-ffff3de4:	f9400085 	ldr	x5, [x4]
+ffff3dd8:	aa1f03e3 	mov	x3, xzr			; x3 = 0
+ffff3ddc:	b0000002 	adrp	x2, 0xffff4000
+ffff3de0:	9131a044 	add	x4, x2, #0xc68		; copy from here
+
+; This copies 256 bytes of stuff from this rom (at 0xffff4c68
+; to SRAM at offset 0x72
+; I call SRAM + 0x72 "code" in the below
+;
+; The copy is odd because we read 8 bytes, but only write 4 of those.
+; So the image in ROM is twice as big as it ought to be.
+; It really doesn't matter since we have plenty of extra
+;  space in the ROM.  But it is odd.
+
+loop:
+ffff3de4:	f9400085 	ldr	x5, [x4]		; read 8 bytes
 ffff3de8:	b0ffc662 	adrp	x2, 0xff8c0000
 ffff3dec:	9101f042 	add	x2, x2, #0x7c		; SRAM + 0x7c
-ffff3df0:	b8236845 	str	w5, [x2, x3]
-ffff3df4:	91002084 	add	x4, x4, #0x8
-ffff3df8:	91001063 	add	x3, x3, #0x4
+ffff3df0:	b8236845 	str	w5, [x2, x3]		; write 4 bytes
+ffff3df4:	91002084 	add	x4, x4, #0x8		; x4 += 8
+ffff3df8:	91001063 	add	x3, x3, #0x4		; x3 += 4
 ffff3dfc:	f104007f 	cmp	x3, #0x100
 ffff3e00:	54ffff21 	b.ne	0xffff3de4
 
-ffff3e04:	340002a1 	cbz	w1, 0xffff3e58
-ffff3e08:	2a1f03e3 	mov	w3, wzr
-ffff3e0c:	2a1f03e4 	mov	w4, wzr
+ffff3e04:	340002a1 	cbz	w1, 0xffff3e58		; return if 0
 
-ffff3e10:	11000463 	add	w3, w3, #0x1
-ffff3e14:	12001c63 	and	w3, w3, #0xff
-ffff3e18:	38634845 	ldrb	w5, [x2, w3, uxtw]
-ffff3e1c:	0b2440a4 	add	w4, w5, w4, uxtw
-ffff3e20:	12001c84 	and	w4, w4, #0xff
-ffff3e24:	38644846 	ldrb	w6, [x2, w4, uxtw]
-ffff3e28:	38234846 	strb	w6, [x2, w3, uxtw]
-ffff3e2c:	38244845 	strb	w5, [x2, w4, uxtw]
-ffff3e30:	38634846 	ldrb	w6, [x2, w3, uxtw]
-ffff3e34:	0b2540c5 	add	w5, w6, w5, uxtw
-ffff3e38:	12001ca5 	and	w5, w5, #0xff
-ffff3e3c:	39400006 	ldrb	w6, [x0]
-ffff3e40:	38654845 	ldrb	w5, [x2, w5, uxtw]
-ffff3e44:	4a0600a5 	eor	w5, w5, w6
-ffff3e48:	39000005 	strb	w5, [x0]
-ffff3e4c:	91000400 	add	x0, x0, #0x1
-ffff3e50:	51000421 	sub	w1, w1, #0x1
+ffff3e08:	2a1f03e3 	mov	w3, wzr		; w3 = 0
+ffff3e0c:	2a1f03e4 	mov	w4, wzr		; w4 = 0
+
+loop:
+ffff3e10:	11000463 	add	w3, w3, #0x1		; w3++
+ffff3e14:	12001c63 	and	w3, w3, #0xff		; w3 &= 0xff
+ffff3e18:	38634845 	ldrb	w5, [x2, w3, uxtw]	; x = code[w3]
+ffff3e1c:	0b2440a4 	add	w4, w5, w4, uxtw	; w4 += x
+ffff3e20:	12001c84 	and	w4, w4, #0xff		; w4 &= 0xff
+ffff3e24:	38644846 	ldrb	w6, [x2, w4, uxtw]	; code[..]
+ffff3e28:	38234846 	strb	w6, [x2, w3, uxtw]	; code[..]
+ffff3e2c:	38244845 	strb	w5, [x2, w4, uxtw]	; code[..]
+ffff3e30:	38634846 	ldrb	w6, [x2, w3, uxtw]	; code[..]
+ffff3e34:	0b2540c5 	add	w5, w6, w5, uxtw	; w5 += w6
+ffff3e38:	12001ca5 	and	w5, w5, #0xff		; w5 &= 0xff
+
+ffff3e3c:	39400006 	ldrb	w6, [x0]		; w6 = *buf
+ffff3e40:	38654845 	ldrb	w5, [x2, w5, uxtw]	; w5 = code[w5]
+ffff3e44:	4a0600a5 	eor	w5, w5, w6		; w5 = w5 ^ w6
+ffff3e48:	39000005 	strb	w5, [x0]		; *buf = w5
+
+ffff3e4c:	91000400 	add	x0, x0, #0x1		; x0++
+ffff3e50:	51000421 	sub	w1, w1, #0x1		; w1--
 ffff3e54:	35fffde1 	cbnz	w1, 0xffff3e10
+
 ffff3e58:	d65f03c0 	ret
+
+; Here is the block used to "uncrypt" in the above
+;
+;	ffff4c68: 00000000 62987d7a
+;	ffff4c70: 00000000 be3d3a96
+;	ffff4c78: 00000000 1246c185
+;	ffff4c80: 00000000 89ebc6ac
+;	ffff4c88: 00000000 780fbd97
+;	ffff4c90: 00000000 e2b5da8b
+;	ffff4c98: 00000000 dc613427
+;	ffff4ca0: 00000000 0ee6f5ed
+;	ffff4ca8: 00000000 72eceed6
+;	ffff4cb0: 00000000 4f041a31
+;	ffff4cb8: 00000000 254e70db
+;	ffff4cc0: 00000000 6fc37ece
+;	ffff4cc8: 00000000 9059793c
+;	ffff4cd0: 00000000 c9335374
+;	ffff4cd8: 00000000 42115884
+;	ffff4ce0: 00000000 755b5d0a
+;	ffff4ce8: 00000000 40c8b067
+;	ffff4cf0: 00000000 cd602d2f
+;	ffff4cf8: 00000000 249c555e
+;	ffff4d00: 00000000 e0aa717c
+;	ffff4d08: 00000000 cc6b8613
+;	ffff4d10: 00000000 b4fea3a8
+;	ffff4d18: 00000000 17191076
+;	ffff4d20: 00000000 1429bff3
+;	ffff4d28: 00000000 5f2c2a0b
+;	ffff4d30: 00000000 41fff748
+;	ffff4d38: 00000000 d3056ad8
+;	ffff4d40: 00000000 d477355c
+;	ffff4d48: 00000000 e4267ff1
+;	ffff4d50: 00000000 00f0471c
+;	ffff4d58: 00000000 9a8eb822
+;	ffff4d60: 00000000 a74d2bbc
+;	ffff4d68: 00000000 3b203609
+;	ffff4d70: 00000000 8f9dc266
+;	ffff4d78: 00000000 e1f87bf9
+;	ffff4d80: 00000000 e8e76980
+;	ffff4d88: 00000000 3ebba592
+;	ffff4d90: 00000000 9b308ad2
+;	ffff4d98: 00000000 4916afd0
+;	ffff4da0: 00000000 ca4aa2cb
+;	ffff4da8: 00000000 9f64d51e
+;	ffff4db0: 00000000 c7d1f4e9
+;	ffff4db8: 00000000 c5b7886e
+;	ffff4dc0: 00000000 56abb344
+;	ffff4dc8: 00000000 4c6883fd
+;	ffff4dd0: 00000000 9ea1b9ae
+;	ffff4dd8: 00000000 43ea1f08
+;	ffff4de0: 00000000 816dfa15
+;	ffff4de8: 00000000 028c2ed9
+;	ffff4df0: 00000000 52b632ef
+;	ffff4df8: 00000000 215a0cdf
+;	ffff4e00: 00000000 fb5028cf
+;	ffff4e08: 00000000 45013f39
+;	ffff4e10: 00000000 51b263d7
+;	ffff4e18: 00000000 a49123de
+;	ffff4e20: 00000000 65dde354
+;	ffff4e28: 00000000 99731d07
+;	ffff4e30: 00000000 ad1ba093
+;	ffff4e38: 00000000 c4a9066c
+;	ffff4e40: 00000000 e5948737
+;	ffff4e48: 00000000 1895c003
+;	ffff4e50: 00000000 f282b14b
+;	ffff4e58: 00000000 5738ba8d
+;	ffff4e60: 00000000 fca60df6
 
 ; ======================================================
 ; Subroutine - called in 2 places
@@ -5616,8 +6210,8 @@ ffff4360:	97fff207 	bl	0xffff0b7c		; CRU, cpu clocks
 ffff4364:	90ffc660 	adrp	x0, 0xff8c0000
 ffff4368:	b900101f 	str	wzr, [x0, #16]		; SRAM[4] = 0
 
-ffff436c:	97fff900 	bl	0xffff276c
-ffff4370:	97fffe75 	bl	0xffff3d44		; usb_spin
+ffff436c:	97fff900 	bl	0xffff276c		; try_four ()
+ffff4370:	97fffe75 	bl	0xffff3d44		; usb_spin ()
 
 ffff4374:	14000000 	b	0xffff4374		; spin
 
@@ -5954,8 +6548,8 @@ ffff4690:	54ffffe8 	b.hi	0xffff468c
 ffff4694:	d65f03c0 	ret
 
 ; We do branch here from above
-; this looks like what starts loaded code 
-; but the only code that branches here loads xzr into x0 !!!
+; the only code that branches here loads xzr into x0 !!!
+; So that would not be good.
 ffff4698:	d61f0000 	br	x0			; go run at address in x0
 
 ffff469c:	00000000 	udf	#0
@@ -6310,6 +6904,9 @@ ffff4c48: 00000000 ffff3a70
 ffff4c50: 00000000 ffff3ab0
 ffff4c58: 00000000 ffff3a70
 ffff4c60: 00000000 ffff3960
+
+; Here is a 0x200 byte block
+; it is a special template used by "uncrypt"
 ffff4c68: 00000000 62987d7a
 ffff4c70: 00000000 be3d3a96
 ffff4c78: 00000000 1246c185
@@ -6374,6 +6971,7 @@ ffff4e48: 00000000 1895c003
 ffff4e50: 00000000 f282b14b
 ffff4e58: 00000000 5738ba8d
 ffff4e60: 00000000 fca60df6
+; END of "uncrypt" block
 
 ; This is a curious 8 bytes of text.
 
