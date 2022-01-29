@@ -3913,6 +3913,7 @@ ffff2c3c:	f9400260 	ldr	x0, [x19]
 ffff2c40:	39401401 	ldrb	w1, [x0, #5]
 ffff2c44:	39401000 	ldrb	w0, [x0, #4]
 ffff2c48:	2a012000 	orr	w0, w0, w1, lsl #8
+
 ffff2c4c:	f9403a61 	ldr	x1, [x19, #0x70]
 ffff2c50:	b9406a62 	ldr	w2, [x19, #0x68]
 ffff2c54:	940003de 	bl	0xffff3bcc		; usb_try_run ()
@@ -4517,6 +4518,8 @@ ffff3390:	d65f03c0 	ret
 ;  x3 - array of 3 params for endpoint
 ;
 ; this returns 0 on success, -1 on a timeout
+; - it gets the command started, but does not
+; wait for completion
 ;
 ; note the add with shift used here
 ; the shift is applied to the last register before the add
@@ -4530,9 +4533,9 @@ ffff33a4:	f90007f3 	str	x19, [sp, #8]
 ffff33a8:	aa0003f3 	mov	x19, x0
 
 ; Writes are to 0xc800 ...
-; which ought to be certain physical endpoint registers
-; these are oddly interleaved.
-; we room here for 13 endpoints (0 - 12)
+; This is an oddly interleaved array of
+;     physical endpoint registers
+; We have room here for 13 endpoints (0 - 12)
 ; calculate base = 0xc800 + 4*n, then:
 ; base + 0 is command param 2
 ; base + 4 is command param 1
@@ -4540,12 +4543,23 @@ ffff33a8:	aa0003f3 	mov	x19, x0
 ; base + c is command
 ;
 ; This is curious because we could have 16 IN and 16 OUT,
-; but this limits us to using only 6 IN and 6 OUT and one more
-; also what I now call the "endpoint index" is what we are using
+; but this limits us to using only 6 IN and 6 OUT and one more.
+;
+; What I now call the "endpoint index" is what we are using here
 ; where the index is 0,2,4,... for OUT endpoints
 ;    and 1,3,5,... for IN endpoints
 ; this is how things work with the endpoint enable register
 ; and I presume that is how it is here also
+
+; the add does w5 += w1 * 16
+;
+; I believe the TRM has an error.  It says things like
+;  0xc800 + 4*n to get the register address.
+;  however 4*n would yield the offset for an array of 32 bit objects
+;  to get the byte offset though, you shift by 4 (as you do here)
+;  or multiply by 14
+
+; copy the 3 params
 
 ffff33ac:	f9402660 	ldr	x0, [x19, #0x48]	; usb hw
 ffff33b0:	b9400864 	ldr	w4, [x3, #8]		; arg3 + 8 (param 0)
@@ -4571,7 +4585,7 @@ ffff33e4:	b8244803 	str	w3, [x0, w4, uxtw]
 ; page 158 in trm2
 
 ffff33e8:	f9402660 	ldr	x0, [x19, #0x48]
-ffff33ec:	32160042 	orr	w2, w2, #0x400		; arg2 | 0x400
+ffff33ec:	32160042 	orr	w2, w2, #0x400		; cmd | 0x400
 ffff33f0:	5280e183 	mov	w3, #0x70c
 ffff33f4:	0b215061 	add	w1, w3, w1, uxtw #4
 ffff33f8:	b8214802 	str	w2, [x0, w1, uxtw]	; endpoint command
@@ -5618,7 +5632,7 @@ ffff3d38:	a9427bfd 	ldp	x29, x30, [sp, #32]
 ffff3d3c:	9100c3ff 	add	sp, sp, #0x30
 ffff3d40:	d65f03c0 	ret
 
-; ========= END of usb_run()
+; ========= END of usb_try_run()
 
 ; =================================
 
@@ -5639,6 +5653,7 @@ ffff3d58:	97fff389 	bl	0xffff0b7c		; CRU, cpu clocks
 ffff3d5c:	97fffa97 	bl	0xffff27b8		; usb_init ()
 
 ffff3d60:	97fffedb 	bl	0xffff38cc		; usb_run ()
+
 ffff3d64:	17ffffff 	b	0xffff3d60	; spin calling the above
 
 ; =============================================
