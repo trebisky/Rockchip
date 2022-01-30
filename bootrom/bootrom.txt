@@ -3427,11 +3427,18 @@ ffff2804:	b900627f 	str	wzr, [x19, #0x60]	; usb_60 = 0
 ;	A = 8 = 0x100 (size of B)
 ;	A + 16 = 0
 ;	A + 20 = 0
-;	A + 24 = B (8 byte addr)
+;	A + 24 = B (8 byte addr) - a second pointer which is never used
 ;	A + 32 = "usb"
 ;
 ; We don't save any pointers to A anywhere, we just "know"
 ; it is at SRAM + 0x410
+;
+; This is entirely about managing the event buffer (which is B)
+; It is manipulated mostly in usb_run, but also by usb_xfer
+; The value at 20 can be set to a flag value of 1, but this seems useless
+; The second pointer to B at offset 24 is never used as far as I can see
+; Why these fields were not simply added to "usb" I cannot say.
+; that is what I would have done.
 
 ffff2808:	d0ffc661 	adrp	x1, 0xff8c0000
 ffff280c:	91104034 	add	x20, x1, #0x410		; SRAM + 0x410 "sram-A"
@@ -3449,6 +3456,9 @@ ffff282c:	b9000a80 	str	w0, [x20, #8]		; size of B, which follows
 ; 0x100 bytes in size.
 ; we save 2 pointers to it in "A" above
 ; we never access it directly, but only via the "A" pointers
+;
+; it is 256 bytes in size, and each event is 4 bytes, so this
+; will hold 64 events.
 
 ffff2830:	d0ffc660 	adrp	x0, 0xff8c0000
 ffff2834:	91084000 	add	x0, x0, #0x210		; SRAM + 0x210
@@ -3827,19 +3837,20 @@ ffff2b24:	d65f03c0 	ret
 
 ;  ======================================
 
-; subroutine -- usb_xfer ( "usb", buf )
+; subroutine -- usb_xfer ( "usb", *event )
 
 ;   HUGE !
 
 ;  only one call, from usb_run ()
 
 ;  passed the pointer to "usb" in x0
-;  another pointer in x1, we call this "buf"
+;  and a pointer to a 32 value (which is an event)
 ;
 ; ubfx is "bitfield extract"
 ;	ubfx	w1, w0, #6, #4
-;  the above extracts from w0 to w1
+;  the above would extract from w0 to w1
 ;  6 is the starting bit, 4 is the number of bits
+;  i.e. 9:4 in this case
 ;  this is a nice way to replace the usual mask and shift
 ;  In C code, this would be:
 ;	dest = (src >> lsb) & ((1 << width) - 1);
@@ -3851,10 +3862,10 @@ ffff2b34:	a9035ff6 	stp	x22, x23, [sp, #48]
 ffff2b38:	a90257f4 	stp	x20, x21, [sp, #32]
 ffff2b3c:	f9000ff3 	str	x19, [sp, #24]
 
-; get pointer to "buf"
+; copy the event pointer
 ffff2b40:	aa0103f4 	mov	x20, x1
 
-; get a 4 byte item from buf that may be badly aligned
+; get a 4 byte item from that pointer that may be badly aligned
 ; then extract bits 9:6
 ffff2b44:	39400e81 	ldrb	w1, [x20, #3]
 ffff2b48:	39400a82 	ldrb	w2, [x20, #2]
@@ -5263,6 +5274,7 @@ ffff38c8:	d65f03c0 	ret
 ;  =======================================================
 ;  =======================================================
 
+; USB_RUN
 ; subroutine -- "usb_run"
 
 ; one call, surrounded by a spin loop, i.e. once we decide that
@@ -5284,7 +5296,7 @@ ffff38e8:	a90253f3 	stp	x19, x20, [sp, #32]
 ; This fetches a pointer to the "usb" block
 ; this is the only routine that does so directly.
 ffff38ec:	b0ffc660 	adrp	x0, 0xff8c0000		; SRAM
-ffff38f0:	910dc013 	add	x19, x0, #0x370
+ffff38f0:	910dc013 	add	x19, x0, #0x370		; "usb"
 
 ; We fetch the USB device base address from offset 0x48
 ; This value is 0xfe80c100
@@ -5307,11 +5319,19 @@ ffff3908:	911042b4 	add	x20, x21, #0x410	; SRAM + 0x410 "sram-A"
 
 ; Note that x20 holds a pointer to sram-A through the entire routine (usb_run)
 
+; A note on the bit in A+20.
+;  - first is that only that bit is used, the location is either 1 or 0
+;  - it starts out zero
+;  - this is the only place we set it
+;  - we only clear it when we exit this routine
+;  - we only check it (near as I can tell) in one place a few lines below
+; So as near as I can tell, it is pointless, but maybe I am missing something.
+
 ffff390c:	b9001280 	str	w0, [x20, #16]		; A+16 = event buffer count
 ffff3910:	b9401680 	ldr	w0, [x20, #20]		; read A+20
 ffff3914:	f9402661 	ldr	x1, [x19, #0x48]	; usb hw
 ffff3918:	32000000 	orr	w0, w0, #0x1
-ffff391c:	b9001680 	str	w0, [x20, #20]		; (A + 20) |= 1
+ffff391c:	b9001680 	str	w0, [x20, #20]		; (A+20) |= 1
 
 ; 0xc408 - global event buffer size
 ; top bit is event interrupt mask
@@ -5323,30 +5343,39 @@ ffff3928:	b9030820 	str	w0, [x1, #0x308]
 
 ; now we inspect the flag we set above in A+20
 ; heaven knows why the code adds first 16, then uses a 4 offset to get it
+; if the bit is zero, we exit this routine
+;  (which I don't think will ever happen
 ffff392c:	91004280 	add	x0, x20, #0x10
-ffff3930:	b9400400 	ldr	w0, [x0, #4]		; w0 = A + 20
+ffff3930:	b9400400 	ldr	w0, [x0, #4]		; w0 = A+20
 ffff3934:	36001060 	tbz	w0, #0, 0xffff3b40	; return if zero
 
 ; fetch event buffer count again
-; why do this again?  Is there a loop hidden here?
+; we never checked it, but now we will and ensure it is >= 1
+
 ffff3938:	b9401296 	ldr	w22, [x20, #16]		; w22 = A + 16
 ffff393c:	710006df 	cmp	w22, #0x1
-ffff3940:	54000f2b 	b.lt	0xffff3b24
+ffff3940:	54000f2b 	b.lt	0xffff3b24		; exit if < 1
 
+; load a bunch of values to be used in the loop below
 ffff3944:	52800097 	mov	w23, #0x4
-ffff3948:	12a3e098 	mov	w24, #0xe0fbffff            	// #-520355841
+ffff3948:	12a3e098 	mov	w24, #0xe0fbffff
 ffff394c:	528019bc 	mov	w28, #0xcd                  	// #205
 ffff3950:	528000ba 	mov	w26, #0x5
-ffff3954:	1282801b 	mov	w27, #0xffffebff	; will modify dctrl
+ffff3954:	1282801b 	mov	w27, #0xffffebff
 ffff3958:	52801cf9 	mov	w25, #0xe7                  	// #231
 
-ffff395c:	14000009 	b	0xffff3980		; enter big loop below
+; This just branches around the following ridiculously out of place
+; block of code and starts into the big loop below
 
-; branch from below when super speed is detected
+ffff395c:	14000009 	b	0xffff3980		; enter BIG loop below
+
+; === Here is an odd out of place block of code for when super speed is detected
+
+; branch (from table below) when super speed is detected
 ffff3960:	f9402660 	ldr	x0, [x19, #0x48]
 ffff3964:	b0ffc661 	adrp	x1, 0xff8c0000
-ffff3968:	91080021 	add	x1, x1, #0x200
-ffff396c:	52804002 	mov	w2, #0x200                 	// #512
+ffff3968:	91080021 	add	x1, x1, #0x200		; sram-C
+ffff396c:	52804002 	mov	w2, #0x200
 ffff3970:	79000822 	strh	w2, [x1, #4]
 
 ; 0xc704 - device control
@@ -5355,32 +5384,59 @@ ffff3974:	b9460401 	ldr	w1, [x0, #0x604]	; USB dctrl
 ffff3978:	12036821 	and	w1, w1, #0xe0ffffff
 ffff397c:	14000058 	b	0xffff3adc
 
-; big loop from below (ffff3b1c)
+; ================== BIG loop from below (ffff3b1c)
+
+; This will process all the events currently in the event buffer
 
 ; Here x21 holds the pointer to the start of SRAM
-; we read the first word
+; we read the first word in block A
+; (why we don't use x20 without an offset?)
+; B is the event buffer
+
 ffff3980:	f9420aa0 	ldr	x0, [x21, #0x410]	; "A" + 0 (points to B)
 ffff3984:	b9400e81 	ldr	w1, [x20, #12]		; "A" + 12 (offset)
-ffff3988:	b8616800 	ldr	w0, [x0, x1]		; B+offset
-ffff398c:	b9000be0 	str	w0, [sp, #8]		; tmp
+
+; read a 32 bit event
+ffff3988:	b8616800 	ldr	w0, [x0, x1]		; event = B:offset
+ffff398c:	b9000be0 	str	w0, [sp, #8]		; save event on stack
+
+; if low bit in event is set, skip the following
 ffff3990:	37000180 	tbnz	w0, #0, 0xffff39c0
 
+; extract bitfield 5:1 (endpoint index 0 or 1)
 ffff3994:	53011400 	ubfx	w0, w0, #1, #5
+
+; x1 = "usb" + field<<3
+; Some real monkey business here, but it works
+; the following will yield either a pointer to X or Y
 ffff3998:	8b204e61 	add	x1, x19, w0, uxtw #3
-ffff399c:	f9401c21 	ldr	x1, [x1, #0x38]		; X ?
-ffff39a0:	b9401821 	ldr	w1, [x1, #24]
-ffff39a4:	36000ac1 	tbz	w1, #0, 0xffff3afc
+ffff399c:	f9401c21 	ldr	x1, [x1, #0x38]		; X or Y
+
+ffff39a0:	b9401821 	ldr	w1, [x1, #24]		; X/Y + 24
+
+ffff39a4:	36000ac1 	tbz	w1, #0, 0xffff3afc	; next event ..
+
+; test endpoint index
 ffff39a8:	7100041f 	cmp	w0, #0x1
-ffff39ac:	54000a88 	b.hi	0xffff3afc
+ffff39ac:	54000a88 	b.hi	0xffff3afc		; next event ..
+
+; The 32 bit event is on the stack and we pass a pointer to it.
+; The code in usb_xfer then carefully moves it byte by byte into
+; a register, which seems sort of silly if we can just put it onto
+; the stack with a single "str" instruction above.
+; perhaps usb_xfer() was originally coded for more general use.
+
+; usb_xfer ( "usb", &event )
 ffff39b0:	910023e1 	add	x1, sp, #0x8
 ffff39b4:	aa1303e0 	mov	x0, x19
-
 ffff39b8:	97fffc5c 	bl	0xffff2b28		; usb_xfer()
-ffff39bc:	14000050 	b	0xffff3afc
+
+ffff39bc:	14000050 	b	0xffff3afc		; next event ..
 
 ; branch from above
 ffff39c0:	121f1801 	and	w1, w0, #0xfe
-ffff39c4:	350009c1 	cbnz	w1, 0xffff3afc
+ffff39c4:	350009c1 	cbnz	w1, 0xffff3afc		; next event ..
+
 ffff39c8:	53082c00 	ubfx	w0, w0, #8, #4
 ffff39cc:	7100081f 	cmp	w0, #0x2
 ffff39d0:	540003a0 	b.eq	0xffff3a44
@@ -5418,25 +5474,32 @@ ffff3a30:	f9402660 	ldr	x0, [x19, #0x48]
 ffff3a34:	b9460001 	ldr	w1, [x0, #0x600]
 ffff3a38:	12166021 	and	w1, w1, #0xfffffc07
 ffff3a3c:	b9060001 	str	w1, [x0, #0x600]
-ffff3a40:	1400002f 	b	0xffff3afc
+ffff3a40:	1400002f 	b	0xffff3afc		; next event ..
+
+; ------------------ now read device status and check speed
 
 ; 0xc70c - device status
 ; read last 3 bits and stash them (connected speed)
 ;  4 is super, 0 is high, 1 is full
+
 ffff3a44:	f9402660 	ldr	x0, [x19, #0x48]
 ffff3a48:	b9460c00 	ldr	w0, [x0, #0x60c]
 ffff3a4c:	12000801 	and	w1, w0, #0x7
 ffff3a50:	39019261 	strb	w1, [x19, #0x64]
 
-; Here is some curious code.
-; First why this shift by 0?
-;  that is an odd way to copy a register, but OK I guess
+; Here is a cute use of a branch table.
+; The branch is all about what speed we got from the
+; device status read above.
+
 ; We reject values greater than 4 to protect our 5 way branch
 ;
-; Then we get an odd 5 way branch table into the code
-; immediately following.
+; Then we use a 5 way branch table into various chunks of code
+; mostly immediately following, but one chunk up above
 
 ; This is testing the connected speed from the status read above
+
+; Why this shift by 0?
+;  an odd way to copy a register, but OK I guess
 
 ffff3a54:	53007c20 	lsr	w0, w1, #0		; w0 = w1
 ffff3a58:	7100103f 	cmp	w1, #0x4
@@ -5450,7 +5513,7 @@ ffff3a6c:	d61f0000 	br	x0			; go to address in x0
 ;  ffff4c48: 00000000 ffff3a70 -- for full speed
 ;  ffff4c50: 00000000 ffff3ab0 -- for 2
 ;  ffff4c58: 00000000 ffff3a70 -- for 3
-;  ffff4c60: 00000000 ffff3960 -- for super speed
+;  ffff4c60: 00000000 ffff3960 -- for super speed (orphan block above)
 
 ; Here for full or high speed
 ffff3a70:	b0ffc660 	adrp	x0, 0xff8c0000
@@ -5459,7 +5522,7 @@ ffff3a78:	52800801 	mov	w1, #0x40		; 64
 ffff3a7c:	14000010 	b	0xffff3abc
 
 ; branched to from above
-ffff3a80:	350003e0 	cbnz	w0, 0xffff3afc
+ffff3a80:	350003e0 	cbnz	w0, 0xffff3afc		; next event ..
 
 ; c704 is the device control register
 ;  we clear bit 10 - INITu1ENA
@@ -5481,13 +5544,14 @@ ffff3a9c:	b9060401 	str	w1, [x0, #0x604]	; USB dctrl
 ffff3aa0:	39419660 	ldrb	w0, [x19, #0x65]
 ffff3aa4:	0a190000 	and	w0, w0, w25
 ffff3aa8:	39019660 	strb	w0, [x19, #0x65]
-ffff3aac:	14000014 	b	0xffff3afc
+ffff3aac:	14000014 	b	0xffff3afc		; next event ..
 
 ; Here for speed "2", whatever that is.
 ffff3ab0:	b0ffc660 	adrp	x0, 0xff8c0000
 ffff3ab4:	91080000 	add	x0, x0, #0x200		; SRAM + 0x200
 ffff3ab8:	52800101 	mov	w1, #0x8		; 8
 
+; full and high speed join here
 ffff3abc:	79000801 	strh	w1, [x0, #4]
 
 ; c700 - device configuration
@@ -5500,32 +5564,52 @@ ffff3ad0:	f9402660 	ldr	x0, [x19, #0x48]
 
 ffff3ad4:	b9460401 	ldr	w1, [x0, #0x604]	; USB dctrl
 ffff3ad8:	0a180021 	and	w1, w1, w24
+
+; super speed code above joins here
 ffff3adc:	b9060401 	str	w1, [x0, #0x604]	; USB dctrl
 
 ffff3ae0:	f9401e60 	ldr	x0, [x19, #0x38]	; X (EP0-OUT)
 ffff3ae4:	52800021 	mov	w1, #0x1
 ffff3ae8:	97fffedb 	bl	0xffff3654		; usb_endpoint_setup(x,1)
-ffff3aec:	35000080 	cbnz	w0, 0xffff3afc
+ffff3aec:	35000080 	cbnz	w0, 0xffff3afc		; next event ..
+
 ffff3af0:	f9402260 	ldr	x0, [x19, #0x40]	; Y (EP0-IN)
 ffff3af4:	52800021 	mov	w1, #0x1
 ffff3af8:	97fffed7 	bl	0xffff3654		; usb_endpoint_setup(y,1)
+
 ; fall through
 
-; Many places branch here from above
+; Many places above branch to here
+; they branch here when they are done processing an event and
+; desire to move on to the next one
 
-; increment A+12 by 4, but keep it to 8 bits
+; increment A+12 by 4.
+; The mask to 8 bits causes it to wrap around the event
+; buffer which is 0x100 (256) bytes in size.
+
 ffff3afc:	b9400e80 	ldr	w0, [x20, #12]		; A + 12
 ffff3b00:	11001000 	add	w0, w0, #0x4
 ffff3b04:	12001c00 	and	w0, w0, #0xff
 ffff3b08:	f9402661 	ldr	x1, [x19, #0x48]
 ffff3b0c:	b9000e80 	str	w0, [x20, #12]		; A + 12
 
+; w22 is the event buffer count (in bytes)
 ffff3b10:	510012d6 	sub	w22, w22, #0x4		; w22 -= 4
+
+; w23 is 4 from way above
+; write that to c40c (event count register)
+; when a value is written to that register, the hardware
+; event count is decremented by that value
 ffff3b14:	b9030c37 	str	w23, [x1, #0x30c]
+
+; Do we have more events ?
 ffff3b18:	710002df 	cmp	w22, #0x0
+
+# This runs the BIG loop
 ffff3b1c:	54fff32c 	b.gt	0xffff3980		; loop back if w22 > 0
 
 ; we are done, wrap up
+; clear our bit at A + 20
 ffff3b20:	b9401680 	ldr	w0, [x20, #20]		; A + 20
 
 ffff3b24:	f9402661 	ldr	x1, [x19, #0x48]	; usb hw
