@@ -3421,7 +3421,7 @@ ffff27fc:	52800060 	mov	w0, #0x3
 ffff2800:	b9005660 	str	w0, [x19, #0x54]	; usb_54 = 3
 ffff2804:	b900627f 	str	wzr, [x19, #0x60]	; usb_60 = 0
 
-; now another small block "A"
+; now another small block "sram-A"
 ;
 ;	A + 0 = B (8 byte addr)
 ;	A = 8 = 0x100 (size of B)
@@ -3434,10 +3434,10 @@ ffff2804:	b900627f 	str	wzr, [x19, #0x60]	; usb_60 = 0
 ; it is at SRAM + 0x410
 
 ffff2808:	d0ffc661 	adrp	x1, 0xff8c0000
-ffff280c:	91104034 	add	x20, x1, #0x410		; SRAM + 0x410 "A"
+ffff280c:	91104034 	add	x20, x1, #0x410		; SRAM + 0x410 "sram-A"
 ffff2810:	f9000a9f 	str	xzr, [x20, #16]		; clear 8 bytes
-ffff2814:	f900069f 	str	xzr, [x20, #8]		; pointless
-ffff2818:	f902083f 	str	xzr, [x1, #0x410]	; also pointless
+ffff2814:	f900069f 	str	xzr, [x20, #8]		; this clears 12 also
+ffff2818:	f902083f 	str	xzr, [x1, #0x410]	; will be overwritten by B
 ffff281c:	52800020 	mov	w0, #0x1
 ffff2820:	b9005260 	str	w0, [x19, #0x50]	; usb_50 = 1
 ffff2824:	f9001293 	str	x19, [x20, #32]		; "usb"
@@ -3445,14 +3445,16 @@ ffff2824:	f9001293 	str	x19, [x20, #32]		; "usb"
 ffff2828:	52802000 	mov	w0, #0x100
 ffff282c:	b9000a80 	str	w0, [x20, #8]		; size of B, which follows
 
-; and a big area "B" (this is the USB event buffer)
+; and a big area "sram-B" (this is the USB event buffer)
 ; 0x100 bytes in size.
 ; we save 2 pointers to it in "A" above
+; we never access it directly, but only via the "A" pointers
 
 ffff2830:	d0ffc660 	adrp	x0, 0xff8c0000
 ffff2834:	91084000 	add	x0, x0, #0x210		; SRAM + 0x210
-ffff2838:	f9000e80 	str	x0, [x20, #24]
-ffff283c:	f9020820 	str	x0, [x1, #0x410]
+ffff2838:	f9000e80 	str	x0, [x20, #24]		; A + 24 (8 bytes)
+ffff283c:	f9020820 	str	x0, [x1, #0x410]	; A + 0  (8 bytes)
+
 ffff2840:	d2802002 	mov	x2, #0x100
 ffff2844:	aa1f03e1 	mov	x1, xzr
 ffff2848:	9400070d 	bl	0xffff447c		; memset ( x0, 0x100, 0 )
@@ -3584,7 +3586,7 @@ ffff2954:	b9010001 	str	w1, [x0, #0x100]
 ffff2958:	52800c80 	mov	w0, #0x64
 ffff295c:	97fff84b 	bl	0xffff0a88		; mmdelay ( 100 )
 
-ffff2960:	b9000e9f 	str	wzr, [x20, #12]
+ffff2960:	b9000e9f 	str	wzr, [x20, #12]		; A+12 = 0
 
 ; Write 4 bytes to C400 ... copied from SRAM
 ; 0xc400 is event buffer addr, low 32 bits
@@ -3592,21 +3594,24 @@ ffff2960:	b9000e9f 	str	wzr, [x20, #12]
 ; 0xc408 is event buffer size in bytes
 ; 0xc40c is event buffer count in bytes
 ;
-; We copy the address of block "B" above,
-; note that we copy a 64 bit address in 2 pieces
+; We copy the address of block "sram-B" above,
+;  we copy the 64 bit address in 2 pieces
 
 ; which is apparently the event buffer, of size 0x100
 
 ffff2964:	f9402660 	ldr	x0, [x19, #0x48]	; usb_hw
-ffff2968:	f9400e81 	ldr	x1, [x20, #24]		; from A+24
+ffff2968:	f9400e81 	ldr	x1, [x20, #24]		; from sram-A+24 (B)
 ffff296c:	b9030001 	str	w1, [x0, #0x300]
 
 ffff2970:	f9402660 	ldr	x0, [x19, #0x48]
-ffff2974:	b9401e81 	ldr	w1, [x20, #28]		; A+28
+ffff2974:	b9401e81 	ldr	w1, [x20, #28]		; sram-A+28
 ffff2978:	b9030401 	str	w1, [x0, #0x304]
 
+; set the size from 2 bytes
+; note that we write this as 4, but little endian
+; lets us read it as 2 just fine.
 ffff297c:	f9402660 	ldr	x0, [x19, #0x48]
-ffff2980:	79401281 	ldrh	w1, [x20, #8]		; size (initially 0x100)
+ffff2980:	79401281 	ldrh	w1, [x20, #8]		; sram-A+8 (initially 0x100)
 ffff2984:	b9030801 	str	w1, [x0, #0x308]
 
 ffff2988:	f9402660 	ldr	x0, [x19, #0x48]
@@ -3630,6 +3635,7 @@ ffff29b8:	aa1303e0 	mov	x0, x19
 ffff29bc:	940002c8 	bl	0xffff34dc	; usb_start ( "usb", 1 )
 ffff29c0:	2a1f03e0 	mov	w0, wzr
 
+; done
 ffff29c4:	a94053f3 	ldp	x19, x20, [sp]
 ffff29c8:	a9417bfd 	ldp	x29, x30, [sp, #16]
 ffff29cc:	910083ff 	add	sp, sp, #0x20
@@ -3911,21 +3917,37 @@ ffff2bf8:	39401000 	ldrb	w0, [x0, #4]
 ffff2bfc:	2a012000 	orr	w0, w0, w1, lsl #8
 ffff2c00:	7111c81f 	cmp	w0, #0x472
 ffff2c04:	54000241 	b.ne	0xffff2c4c  // b.any
-ffff2c08:	f9402660 	ldr	x0, [x19, #0x48]
-ffff2c0c:	b9430c00 	ldr	w0, [x0, #0x30c]
+
+; this is usb_xfer ()
+
+; c40c is the "global event buffer count register 0"
+;  the count is returned in bytes
+;  if you write to it, it decrements the count by the value written
+
+; the only thing we do here with sram-A is to post the event count
+; all the action with sram-A is in usb_run
+
+ffff2c08:	f9402660 	ldr	x0, [x19, #0x48]	; usb hw
+ffff2c0c:	b9430c00 	ldr	w0, [x0, #0x30c]	; c40c
 ffff2c10:	121e3400 	and	w0, w0, #0xfffc
 
 ffff2c14:	d0ffc661 	adrp	x1, 0xff8c0000
-ffff2c18:	91104021 	add	x1, x1, #0x410		; SRAM + 0x410 'A'
-ffff2c1c:	b9001020 	str	w0, [x1, #16]
+ffff2c18:	91104021 	add	x1, x1, #0x410		; SRAM + 0x410 'sram-A'
+ffff2c1c:	b9001020 	str	w0, [x1, #16]		: a+16 = event count
+
 ffff2c20:	340000e0 	cbz	w0, 0xffff2c3c
-ffff2c24:	f9402661 	ldr	x1, [x19, #0x48]
+
+ffff2c24:	f9402661 	ldr	x1, [x19, #0x48]	; usb_hw
 ffff2c28:	52800082 	mov	w2, #0x4
-ffff2c2c:	51001000 	sub	w0, w0, #0x4
+ffff2c2c:	51001000 	sub	w0, w0, #0x4		; decrement our count
+
+; This write of "4" causes hardware to decrement the event count value
 ffff2c30:	b9030c22 	str	w2, [x1, #0x30c]
+
 ffff2c34:	7100001f 	cmp	w0, #0x0
 ffff2c38:	54ffffac 	b.gt	0xffff2c2c
-ffff2c3c:	f9400260 	ldr	x0, [x19]
+
+ffff2c3c:	f9400260 	ldr	x0, [x19]		; J
 ffff2c40:	39401401 	ldrb	w1, [x0, #5]
 ffff2c44:	39401000 	ldrb	w0, [x0, #4]
 ffff2c48:	2a012000 	orr	w0, w0, w1, lsl #8
@@ -4704,6 +4726,7 @@ ffff34d8:	d65f03c0 	ret
 ;  ===================================================
 
 ; usb_start ( usb, 1 )
+
 ; subroutine, called once during usb initialization
 ; passed x0 as pointer to usb control structure in SRAM
 ; passed x1 = 1
@@ -5249,7 +5272,7 @@ ffff38c8:	d65f03c0 	ret
 ; This must be hand coded.
 ; No compiler would have generated this mess.
 
-ffff38cc:	d10203ff 	sub	sp, sp, #0x80
+ffff38cc:	d10203ff 	sub	sp, sp, #0x80		; prolog
 ffff38d0:	a9077bfd 	stp	x29, x30, [sp, #112]
 ffff38d4:	9101c3fd 	add	x29, sp, #0x70
 ffff38d8:	a90673fb 	stp	x27, x28, [sp, #96]
@@ -5259,7 +5282,7 @@ ffff38e4:	a9035bf5 	stp	x21, x22, [sp, #48]
 ffff38e8:	a90253f3 	stp	x19, x20, [sp, #32]
 
 ; This fetches a pointer to the "usb" block
-; this is the only routine that does so.
+; this is the only routine that does so directly.
 ffff38ec:	b0ffc660 	adrp	x0, 0xff8c0000		; SRAM
 ffff38f0:	910dc013 	add	x19, x0, #0x370
 
@@ -5267,7 +5290,7 @@ ffff38f0:	910dc013 	add	x19, x0, #0x370
 ; This value is 0xfe80c100
 ; We add offsets, like 0x30c to get "c40c"
 
-ffff38f4:	f9402660 	ldr	x0, [x19, #0x48]	; usb hw base
+ffff38f4:	f9402660 	ldr	x0, [x19, #0x48]	; usb hw
 
 ; This reads the global event buffer count
 ; a 16 bit value with the count in bytes
@@ -5280,11 +5303,13 @@ ffff3900:	34001200 	cbz	w0, 0xffff3b40		; return if zero
 ; non-zero, something to do
 
 ffff3904:	b0ffc675 	adrp	x21, 0xff8c0000
-ffff3908:	911042b4 	add	x20, x21, #0x410	; SRAM + 0x410 "A"
+ffff3908:	911042b4 	add	x20, x21, #0x410	; SRAM + 0x410 "sram-A"
 
-ffff390c:	b9001280 	str	w0, [x20, #16]		; A+0x10 = event buffer count
+; Note that x20 holds a pointer to sram-A through the entire routine (usb_run)
+
+ffff390c:	b9001280 	str	w0, [x20, #16]		; A+16 = event buffer count
 ffff3910:	b9401680 	ldr	w0, [x20, #20]		; read A+20
-ffff3914:	f9402661 	ldr	x1, [x19, #0x48]	; usb hw base -- fe80c100
+ffff3914:	f9402661 	ldr	x1, [x19, #0x48]	; usb hw
 ffff3918:	32000000 	orr	w0, w0, #0x1
 ffff391c:	b9001680 	str	w0, [x20, #20]		; (A + 20) |= 1
 
@@ -5296,12 +5321,15 @@ ffff3920:	b9430820 	ldr	w0, [x1, #0x308]
 ffff3924:	32010000 	orr	w0, w0, #0x80000000
 ffff3928:	b9030820 	str	w0, [x1, #0x308]
 
-ffff392c:	91004280 	add	x0, x20, #0x10		; x0 = A + 0x10
-ffff3930:	b9400400 	ldr	w0, [x0, #4]		; w0 = A + 0x14
+; now we inspect the flag we set above in A+20
+; heaven knows why the code adds first 16, then uses a 4 offset to get it
+ffff392c:	91004280 	add	x0, x20, #0x10
+ffff3930:	b9400400 	ldr	w0, [x0, #4]		; w0 = A + 20
 ffff3934:	36001060 	tbz	w0, #0, 0xffff3b40	; return if zero
 
 ; fetch event buffer count again
-ffff3938:	b9401296 	ldr	w22, [x20, #16]		; w22 = A + 0x10
+; why do this again?  Is there a loop hidden here?
+ffff3938:	b9401296 	ldr	w22, [x20, #16]		; w22 = A + 16
 ffff393c:	710006df 	cmp	w22, #0x1
 ffff3940:	54000f2b 	b.lt	0xffff3b24
 
@@ -5328,9 +5356,12 @@ ffff3978:	12036821 	and	w1, w1, #0xe0ffffff
 ffff397c:	14000058 	b	0xffff3adc
 
 ; big loop from below (ffff3b1c)
-ffff3980:	f9420aa0 	ldr	x0, [x21, #0x410]	; area "A"
-ffff3984:	b9400e81 	ldr	w1, [x20, #12]		; "A" + 12
-ffff3988:	b8616800 	ldr	w0, [x0, x1]
+
+; Here x21 holds the pointer to the start of SRAM
+; we read the first word
+ffff3980:	f9420aa0 	ldr	x0, [x21, #0x410]	; "A" + 0 (points to B)
+ffff3984:	b9400e81 	ldr	w1, [x20, #12]		; "A" + 12 (offset)
+ffff3988:	b8616800 	ldr	w0, [x0, x1]		; B+offset
 ffff398c:	b9000be0 	str	w0, [sp, #8]		; tmp
 ffff3990:	37000180 	tbnz	w0, #0, 0xffff39c0
 
@@ -5481,28 +5512,31 @@ ffff3af8:	97fffed7 	bl	0xffff3654		; usb_endpoint_setup(y,1)
 ; fall through
 
 ; Many places branch here from above
-ffff3afc:	b9400e80 	ldr	w0, [x20, #12]
+
+; increment A+12 by 4, but keep it to 8 bits
+ffff3afc:	b9400e80 	ldr	w0, [x20, #12]		; A + 12
 ffff3b00:	11001000 	add	w0, w0, #0x4
 ffff3b04:	12001c00 	and	w0, w0, #0xff
 ffff3b08:	f9402661 	ldr	x1, [x19, #0x48]
-ffff3b0c:	b9000e80 	str	w0, [x20, #12]
+ffff3b0c:	b9000e80 	str	w0, [x20, #12]		; A + 12
+
 ffff3b10:	510012d6 	sub	w22, w22, #0x4		; w22 -= 4
 ffff3b14:	b9030c37 	str	w23, [x1, #0x30c]
 ffff3b18:	710002df 	cmp	w22, #0x0
 ffff3b1c:	54fff32c 	b.gt	0xffff3980		; loop back if w22 > 0
 
 ; we are done, wrap up
-ffff3b20:	b9401680 	ldr	w0, [x20, #20]
+ffff3b20:	b9401680 	ldr	w0, [x20, #20]		; A + 20
 
 ffff3b24:	f9402661 	ldr	x1, [x19, #0x48]	; usb hw
-ffff3b28:	b900129f 	str	wzr, [x20, #16]
+ffff3b28:	b900129f 	str	wzr, [x20, #16]		; A + 16
 ffff3b2c:	121f7800 	and	w0, w0, #0xfffffffe
-ffff3b30:	b9001680 	str	w0, [x20, #20]
+ffff3b30:	b9001680 	str	w0, [x20, #20]		; A + 20
 
 ; 0xc408 - global event buffer size
 ; top bit is event interrupt mask
 ; clear the bit that prevents interrupts
-;  (why do this?  We don't take interrupts.  Or do we?
+;  why do this?  We don't take interrupts.  Or do we?
 
 ffff3b34:	b9430820 	ldr	w0, [x1, #0x308]
 ffff3b38:	12007800 	and	w0, w0, #0x7fffffff
