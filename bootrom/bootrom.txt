@@ -601,14 +601,18 @@ ffff0380:	52800101 	mov	w1, #0x8	; efuse offset
 ffff0384:	52800102 	mov	w2, #0x8	; read 8 words
 ffff0388:	aa1603e0 	mov	x0, x22		; put it here
 ffff038c:	94000ef8 	bl	0xffff3f6c	; read_efuse()
+
 ffff0390:	52804000 	mov	w0, #0x200
-ffff0394:	94000050 	bl	0xffff04d4		; crypto1
+ffff0394:	94000050 	bl	0xffff04d4		; crypto_set_hash_len
+
 ffff0398:	52804001 	mov	w1, #0x200
 ffff039c:	aa1503e0 	mov	x0, x21
 ffff03a0:	94000061 	bl	0xffff0524		; crypto2
+
 ffff03a4:	9100a3f5 	add	x21, sp, #0x28
 ffff03a8:	aa1503e0 	mov	x0, x21
 ffff03ac:	94000071 	bl	0xffff0570		; crypto3
+
 ffff03b0:	d2800402 	mov	x2, #0x20
 ffff03b4:	aa1503e0 	mov	x0, x21
 ffff03b8:	aa1603e1 	mov	x1, x22
@@ -715,55 +719,100 @@ ffff04d0:	d65f03c0 	ret
 ;
 ; There are two units, hence crypto0 and crypto1
 ; So far I have found no documentation in the TRM.
+; only the first unit (crypto0) is used in this code
 
-; subroutine "crypto1"
+; Here is what I see here:
+
+;  crypt + 0xc |= 0x20
+;    crypt + 0x188 = w0
+;  crypt + 0x180 = 0xa
+;  crypt + 0x8 = 0x40_0040
+;  spin until crypt + 0x8 goes 0
+;  return 0
+
+; Now, looking at a driver for the rk3328 crypto
+; c + 0xc is the config register, the above sets "address mode"
+; c + 0x8 is the control register,
+;	the above sets "hash flush"
+;	note the business of the top 16 bits being an enable mask
+; c + 0x0180 is the hash control register,
+; c + 0x0188 is the hash length register,
+
+
+;  =======================================
+
+; subroutine crypto_set_hash_len ( length )
+
+; set the length in bytes - 2 of something to follow
+
 ffff04d4:	90000021 	adrp	x1, 0xffff4000
 ffff04d8:	b94e8021 	ldr	w1, [x1, #0xe80]	; ffff4e80: ff8b000c
 ffff04dc:	b9400022 	ldr	w2, [x1]
 ffff04e0:	321b0042 	orr	w2, w2, #0x20
-ffff04e4:	b9000022 	str	w2, [x1]
+ffff04e4:	b9000022 	str	w2, [x1]		; config |= 0x20
 
 ffff04e8:	90000021 	adrp	x1, 0xffff4000
 ffff04ec:	b94e8421 	ldr	w1, [x1, #0xe84]	; ffff4e84: ff8b0188
-ffff04f0:	b9000020 	str	w0, [x1]
+ffff04f0:	b9000020 	str	w0, [x1]		; hlen = arg
 
 ffff04f4:	90000020 	adrp	x0, 0xffff4000
 ffff04f8:	b94e8801 	ldr	w1, [x0, #0xe88]	; ffff4e88: ff8b0180
+
 ffff04fc:	90000020 	adrp	x0, 0xffff4000
 ffff0500:	b94e8c00 	ldr	w0, [x0, #0xe8c]	; ffff4e8c: ff8b0008
-ffff0504:	52800142 	mov	w2, #0xa		; w2 = 10
-ffff0508:	b9000022 	str	w2, [x1]
+
+ffff0504:	52800142 	mov	w2, #0xa
+ffff0508:	b9000022 	str	w2, [x1]		; hctl = 0xa
 
 ffff050c:	320a83e1 	mov	w1, #0x400040
-ffff0510:	b9000001 	str	w1, [x0]
+ffff0510:	b9000001 	str	w1, [x0]		; ctl = 0x40_0040
+
 ffff0514:	b9400001 	ldr	w1, [x0]
-ffff0518:	3737ffe1 	tbnz	w1, #6, 0xffff0514	; loop
-ffff051c:	aa1f03e0 	mov	x0, xzr
+ffff0518:	3737ffe1 	tbnz	w1, #6, 0xffff0514	; loop on ctl, bit 0x40
+
+ffff051c:	aa1f03e0 	mov	x0, xzr			; return 0 (always)
 ffff0520:	d65f03c0 	ret
 
-; subroutine "crypto2"
-; ff8b0000 is crypto0
+;  =======================================
+
+; subroutine crypto2 ( buf, len )
+
+; spin reading control register until bit 3 (0x08) clears
+; this bit is "hash start"
 ffff0524:	90000022 	adrp	x2, 0xffff4000
-ffff0528:	b94e9042 	ldr	w2, [x2, #0xe90]
+ffff0528:	b94e9042 	ldr	w2, [x2, #0xe90]	; ffff4e90: ff8b0008
 ffff052c:	b9400043 	ldr	w3, [x2]
 ffff0530:	371fffa3 	tbnz	w3, #3, 0xffff0524
-ffff0534:	d2bff163 	mov	x3, #0xff8b0000
-ffff0538:	52800204 	mov	w4, #0x10                  	// #16
+
+; write to clear "hash done" interrupt
+ffff0534:	d2bff163 	mov	x3, #0xff8b0000		; crypto hw
+ffff0538:	52800204 	mov	w4, #0x10
 ffff053c:	b9000064 	str	w4, [x3]
+
+; write "rcv dma start address"
 ffff0540:	90000023 	adrp	x3, 0xffff4000
-ffff0544:	b94e9463 	ldr	w3, [x3, #0xe94]
+ffff0544:	b94e9463 	ldr	w3, [x3, #0xe94]	; ffff4e94: ff8b001c
 ffff0548:	b9000060 	str	w0, [x3]
+
+; write "rcv dma length"
 ffff054c:	11000c20 	add	w0, w1, #0x3
 ffff0550:	90000021 	adrp	x1, 0xffff4000
-ffff0554:	b94e9821 	ldr	w1, [x1, #0xe98]
+ffff0554:	b94e9821 	ldr	w1, [x1, #0xe98]	; ffff4e98: ff8b0020
 ffff0558:	53027c00 	lsr	w0, w0, #2
 ffff055c:	b9000020 	str	w0, [x1]
-ffff0560:	320d83e0 	mov	w0, #0x80008               	// #524296
+
+; write control register, set "hash start"
+ffff0560:	320d83e0 	mov	w0, #0x80008
 ffff0564:	b9000040 	str	w0, [x2]
-ffff0568:	aa1f03e0 	mov	x0, xzr
+
+ffff0568:	aa1f03e0 	mov	x0, xzr			; return 0 (always)
 ffff056c:	d65f03c0 	ret
 
 ; subroutine "crypto3" -- only called once
+; ffff4e9c: ff8b0008
+; ffff4ea0: ff8b0184
+; ffff4ea4: ff8b018c
+
 ffff0570:	90000021 	adrp	x1, 0xffff4000
 ffff0574:	b94e9c21 	ldr	w1, [x1, #0xe9c]	; ffff4e9c: ff8b0008
 ffff0578:	b9400021 	ldr	w1, [x1]
@@ -3256,12 +3305,15 @@ ffff265c:	b9401be1 	ldr	w1, [sp, #24]
 ffff2660:	6b3c403f 	cmp	w1, w28, uxtw
 ffff2664:	54000301 	b.ne	0xffff26c4  // b.any
 ffff2668:	36000100 	tbz	w0, #0, 0xffff2688
-ffff266c:	52810001 	mov	w1, #0x800                 	// #2048
+
+ffff266c:	52810001 	mov	w1, #0x800
 ffff2670:	aa1803e0 	mov	x0, x24
 ffff2674:	97fff7ac 	bl	0xffff0524		; crypto2
+
 ffff2678:	d0ffc660 	adrp	x0, 0xff8c0000
 ffff267c:	9100d000 	add	x0, x0, #0x34
 ffff2680:	97fff7ce 	bl	0xffff05b8		; crypto4
+
 ffff2684:	350005c0 	cbnz	w0, 0xffff273c
 ffff2688:	b9400340 	ldr	w0, [x26]
 ffff268c:	d0000001 	adrp	x1, 0xffff4000
@@ -3275,13 +3327,15 @@ ffff26a8:	350004a0 	cbnz	w0, 0xffff273c
 ffff26ac:	b9400ee0 	ldr	w0, [x23, #12]
 ffff26b0:	34000060 	cbz	w0, 0xffff26bc
 ffff26b4:	f94007e0 	ldr	x0, [sp, #8]
-ffff26b8:	97fff787 	bl	0xffff04d4		; crypto1
+ffff26b8:	97fff787 	bl	0xffff04d4		; crypto_set_hash_len
 ffff26bc:	aa1f03f8 	mov	x24, xzr
 ffff26c0:	14000011 	b	0xffff2704
 ffff26c4:	36000080 	tbz	w0, #0, 0xffff26d4
-ffff26c8:	52810001 	mov	w1, #0x800                 	// #2048
+
+ffff26c8:	52810001 	mov	w1, #0x800
 ffff26cc:	aa1803e0 	mov	x0, x24
 ffff26d0:	97fff795 	bl	0xffff0524		; crypto2
+
 ffff26d4:	91200318 	add	x24, x24, #0x800
 ffff26d8:	1400000b 	b	0xffff2704
 ffff26dc:	aa1803e0 	mov	x0, x24
@@ -3293,7 +3347,7 @@ ffff26f0:	9100d000 	add	x0, x0, #0x34
 ffff26f4:	d2800882 	mov	x2, #0x44                  	// #68
 ffff26f8:	94000756 	bl	0xffff4450	; memcpy
 ffff26fc:	f9400be0 	ldr	x0, [sp, #16]
-ffff2700:	97fff775 	bl	0xffff04d4		; crypto1
+ffff2700:	97fff775 	bl	0xffff04d4		; crypto_set_hash_len
 ffff2704:	1100139c 	add	w28, w28, #0x4
 ffff2708:	6b3b439f 	cmp	w28, w27, uxtw
 ffff270c:	54fff683 	b.cc	0xffff25dc  // b.lo, b.ul, b.last
@@ -5853,11 +5907,14 @@ ffff3c8c:	340001c0 	cbz	w0, 0xffff3cc4
 ffff3c90:	b0ffc675 	adrp	x21, 0xff8c0000
 ffff3c94:	b94032a0 	ldr	w0, [x21, #0x30]	; SRAM + 0x30
 ffff3c98:	340004c0 	cbz	w0, 0xffff3d30		; return if 0
+
 ffff3c9c:	aa1403e0 	mov	x0, x20
-ffff3ca0:	97fff20d 	bl	0xffff04d4		; crypto1 ( x20 )
+ffff3ca0:	97fff20d 	bl	0xffff04d4		; crypto_set_hash_len ( x20 )
+
 ffff3ca4:	aa1303e0 	mov	x0, x19
 ffff3ca8:	aa1403e1 	mov	x1, x20
 ffff3cac:	97fff21e 	bl	0xffff0524		; crypto2 ( x19, x20 )
+
 ffff3cb0:	b0ffc660 	adrp	x0, 0xff8c0000
 ffff3cb4:	9100d000 	add	x0, x0, #0x34
 ffff3cb8:	91009000 	add	x0, x0, #0x24
@@ -5876,11 +5933,14 @@ ffff3cd4:	14000010 	b	0xffff3d14
 ffff3cd8:	b0ffc675 	adrp	x21, 0xff8c0000
 ffff3cdc:	b94032a0 	ldr	w0, [x21, #0x30]	; SRAM + 0x30
 ffff3ce0:	34000280 	cbz	w0, 0xffff3d30		; return if 0
+
 ffff3ce4:	aa1403e0 	mov	x0, x20
-ffff3ce8:	97fff1fb 	bl	0xffff04d4		; crypto1 ( x20 )
+ffff3ce8:	97fff1fb 	bl	0xffff04d4		; crypto_set_hash_len ( x20 )
+
 ffff3cec:	aa1303e0 	mov	x0, x19
 ffff3cf0:	aa1403e1 	mov	x1, x20
 ffff3cf4:	97fff20c 	bl	0xffff0524		; crypto2 ( x19, x20 )
+
 ffff3cf8:	b0ffc660 	adrp	x0, 0xff8c0000
 ffff3cfc:	9100d000 	add	x0, x0, #0x34
 ffff3d00:	97fff22e 	bl	0xffff05b8		; crypto4 ( SRAM + 0x34 )
