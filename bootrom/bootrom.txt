@@ -3779,6 +3779,10 @@ ffff29d0:	d65f03c0 	ret
 
 ;  usb_start_transfer_x ( "usb" )
 
+; This is called during initialization.
+; It sets up the first ever transfer.
+; This is on X (EP0_OUT) which is how we receive from the host.
+
 ; called from one place below -- 
 ; this basically sets up the registers as
 ; if we were calling usb_start_transfer(), but we fall through into it.
@@ -3790,12 +3794,9 @@ ffff29e0:	aa1f03e1 	mov	x1, xzr
 ffff29e4:	aa1f03e5 	mov	x5, xzr
 
 ; a second argument of 0 locks this to X (EP0-OUT)
+; We receive EP0_OUT transfers in sram-J (64 bytes in size)
 
 ; usb_start_transfer ( "usb", 0, J, 8, 0x20, 0 )
-
-; the reference to "sram-J" suggests we might be reading into sram-J,
-; especially given that at this stage it is a bunch of zeros.
-; sram-J is 64 bytes in size
 
 ffff29e8:	14000001 	b	0xffff29ec		; usb_start_transfer ()
 ; The above branch is sort of silly
@@ -3829,6 +3830,8 @@ ffff29f8:	a90153f3 	stp	x19, x20, [sp, #16]
 ; then zero extends (uxtb) the result.
 
 ffff29fc:	aa0003f3 	mov	x19, x0			; x19 = "usb"
+
+; calculate X/Y from endpoint index
 ffff2a00:	8b210e60 	add	x0, x19, w1, uxtb #3
 ffff2a04:	f9401c14 	ldr	x20, [x0, #0x38]	; x20 = X/Y
 
@@ -3899,11 +3902,11 @@ ffff2a84:	390020c3 	strb	w3, [x6, #8]		; kk[8] = w3<<0
 
 ; This flag is 0 or 1
 ffff2a88:	710000bf 	cmp	w5, #0x0
-ffff2a8c:	52818060 	mov	w0, #0xc03	; for flag == 0
-ffff2a90:	528080a1 	mov	w1, #0x405	; for flag == 1
+ffff2a8c:	52818060 	mov	w0, #0xc03		; for flag == 0
+ffff2a90:	528080a1 	mov	w1, #0x405		; for flag == 1
 ffff2a94:	1a801020 	csel	w0, w1, w0, ne
 
-ffff2a98:	2a040000 	orr	w0, w0, w4	; combine with w4 (arg B)
+ffff2a98:	2a040000 	orr	w0, w0, w4		; combine with w4 (arg B)
 
 ffff2a9c:	53187c01 	lsr	w1, w0, #24
 ffff2aa0:	39003cc1 	strb	w1, [x6, #15]		; kk[15] = w4>>24
@@ -4253,10 +4256,12 @@ ffff2cbc:	39019662 	strb	w2, [x19, #0x65]	; clear 0x01 in lucy
 
 ffff2cc0:	b9405e61 	ldr	w1, [x19, #0x5c]	; get xfer_code
 ffff2cc4:	71000c3f 	cmp	w1, #0x3
-ffff2cc8:	54000820 	b.eq	0xffff2dcc		; == 3 ?
+ffff2cc8:	54000820 	b.eq	0xffff2dcc		; Go handle 3
 
 ffff2ccc:	7100083f 	cmp	w1, #0x2
-ffff2cd0:	54000841 	b.ne	0xffff2dd8		; branch must be 1
+ffff2cd0:	54000841 	b.ne	0xffff2dd8		; Go handle 1
+
+; fall thru to handle 2
 
 ; ---------------------------------- ---------------------------------
 ; ---------------------------------- ---------------------------------
@@ -4572,23 +4577,98 @@ ffff2f24:	f9401c74 	ldr	x20, [x3, #0x38]
 ffff2f28:	7100085f 	cmp	w2, #0x2
 ffff2f2c:	54000681 	b.ne	0xffff2ffc
 
-ffff2f30:	36300d60 	tbz	w0, #6, 0xffff30dc		; return
+; so, we have a get descriptor, but NOT type "configuration"
+
+ffff2f30:	36300d60 	tbz	w0, #6, 0xffff30dc	; return
 
 ffff2f34:	39401c20 	ldrb	w0, [x1, #7]
 ffff2f38:	39401821 	ldrb	w1, [x1, #6]
 ffff2f3c:	2a002020 	orr	w0, w1, w0, lsl #8	; 16 bit length field
 
+; if ( len < 10 ) w21 = len else w21 = 0x20
+; so we will send at least 10 bytes
+
 ffff2f40:	7100281f 	cmp	w0, #0xa
 ffff2f44:	52800401 	mov	w1, #0x20
 ffff2f48:	1a813015 	csel	w21, w0, w1, cc
+
 ffff2f4c:	53007ea2 	lsr	w2, w21, #0		; w2 = w21
 
 ffff2f50:	d0ffc660 	adrp	x0, 0xff8c0000
 ffff2f54:	91070000 	add	x0, x0, #0x1c0		; sram-J
+
 ffff2f58:	d0000001 	adrp	x1, 0xffff4000
-ffff2f5c:	91307021 	add	x1, x1, #0xc1c
+ffff2f5c:	91307021 	add	x1, x1, #0xc1c		; x1 = ffff4c1c
 ffff2f60:	14000035 	b	0xffff3034
 
+; Here is raw stuff from "odx"
+00004c10 0722 0c33 0001 0000 0001 0000 0902 2000
+00004c20 0101 0080 c809 0400 0002 ff06 0500 0705
+00004c30 8102 0002 0007 0502 0200 0200 0000 0000
+00004c40 703a ffff 0000 0000 703a ffff 0000 0000
+00004c50 b03a ffff 0000 0000 703a ffff 0000 0000
+00004c60 6039 ffff 0000 0000 7a7d 9862 0000 0000
+00004c70 963a 3dbe 0000 0000 85c1 4612 0000 0000
+00004c80 acc6 eb89 0000 0000 97bd 0f78 0000 0000
+00004c90 8bda b5e2 0000 0000 2734 61dc 0000 0000
+00004ca0 edf5 e60e 0000 0000 d6ee ec72 0000 0000
+00004cb0 311a 044f 0000 0000 db70 4e25 0000 0000
+00004cc0 ce7e c36f 0000 0000 3c79 5990 0000 0000
+00004cd0 7453 33c9 0000 0000 8458 1142 0000 0000
+00004ce0 0a5d 5b75 0000 0000 67b0 c840 0000 0000
+
+So we are going to send the following 32 bytes when we branch:
+; --- ffff4c1c 0902 2000
+; --- ffff4c20 0101 0080
+; --- ffff4c24 c809 0400
+; --- ffff4c28 0002 ff06
+
+; --- ffff4c2c 0500 0705
+; --- 00004c30 8102 0002
+; --- ffff4c34 0007 0502
+; --- ffff4c38 0200 0200
+
+; What are they?
+; They are actually a lump of 4 descriptors, as follows:
+
+;  -- the first 9 bytes:
+; The first byte is a length (9 bytes)
+; The next byte is the descriptor type = 2 (configuration)
+; the next word is total length in bytes = 0x0020
+; The next byte is the number of interfaces = 1
+; The next byte is config value = 1
+; The next byte is a string index (0, not used)
+; The next byte is an attribute bitmap = 0x80 (nothing here)
+; The next byte is max power = 0xc8 = 200 mA
+
+;  -- the next 9 bytes:
+; The first byte is a length (9 bytes)
+; The next byte is the descriptor type = 4 (interface)
+; The next byte is the interface number = 0
+; The next byte is the "alternate setting" = 0
+; The next byte is "number of endpoints" = 2
+; The next byte is "interface class" = 0xff = vendor defined
+; The next byte is "subclass" = 6
+; The next byte is "protocol" = 5
+; The next byte is string index for interface = 0
+
+;  -- the next 7 bytes:
+; The first byte is a length (7 bytes)
+; The next byte is the descriptor type = 5 (endpoint descr)
+; The next byte is endpoint address = 0x81 (IN 1)
+; The next byte is attributes = 2 (bulk)
+; The next word is max packet size = 0x200 = 512
+; The next byte is polling interval = 0
+
+;  -- the next 7 bytes:
+; The first byte is a length (7 bytes)
+; The next byte is the descriptor type = 5 (endpoint descr)
+; The next byte is endpoint address = 0x02 (OUT 2)
+; The next byte is attributes = 2 (bulk)
+; The next word is max packet size = 0x200 = 512
+; The next byte is polling interval = 0
+
+; --------------------------
 ; We got a SETUP packet with "set configuration"
 
 ffff2f64:	b9406262 	ldr	w2, [x19, #0x60]	; w2 = pete
@@ -4682,6 +4762,7 @@ ffff3010:	2a002020 	orr	w0, w1, w0, lsl #8	; 16 bit length field
 ffff3014:	7100481f 	cmp	w0, #0x12
 ffff3018:	52800241 	mov	w1, #0x12		; 18
 ffff301c:	1a808035 	csel	w21, w1, w0, hi
+
 ffff3020:	53007ea2 	lsr	w2, w21, #0		; w2 = w21
 
 ; The following lump of stuff includes
@@ -4721,7 +4802,10 @@ ffff3024:	b0ffc660 	adrp	x0, 0xff8c0000
 ffff3028:	91070000 	add	x0, x0, #0x1c0		; sram-J
 
 ffff302c:	b0000001 	adrp	x1, 0xffff4000
-ffff3030:	91302021 	add	x1, x1, #0xc08
+ffff3030:	91302021 	add	x1, x1, #0xc08		; ffff4c08
+
+; We branch here from above with x1 = ffff4c1c and N = 10
+; or we fall through with x1 = ffff4c08 and N = 12
 
 ffff3034:	94000507 	bl	0xffff4450		; memcpy ( sram-J, stuff, N )
 
@@ -4730,7 +4814,7 @@ ffff303c:	b9005e60 	str	w0, [x19, #0x5c]	; xfer_code = 2
 
 ffff3040:	aa1303e0 	mov	x0, x19
 ffff3044:	aa1403e1 	mov	x1, x20
-ffff3048:	aa1503e2 	mov	x2, x21
+ffff3048:	aa1503e2 	mov	x2, x21		; X/Y ??
 
 ffff304c:	94000084 	bl	0xffff325c	; usb_xfer4 ( "usb", x20, x21 )
 
@@ -4861,7 +4945,7 @@ ffff3140:	17fffe2b 	b	0xffff29ec		; usb_start_transfer ()
 
 ; ===============================================================
 
-; subroutine -- usb_xfer3 ( "usb", ?? )
+; subroutine -- usb_xfer3 ( "usb", Q )
 ; 3 calls from usb_one
 
 ffff3144:	d100c3ff 	sub	sp, sp, #0x30		; prolog
@@ -4870,15 +4954,19 @@ ffff314c:	910083fd 	add	x29, sp, #0x20
 ffff3150:	a90157f4 	stp	x20, x21, [sp, #16]
 ffff3154:	f90007f3 	str	x19, [sp, #8]
 
-ffff3158:	39400022 	ldrb	w2, [x1]
-ffff315c:	aa0003f3 	mov	x19, x0
-ffff3160:	121b0440 	and	w0, w2, #0x60
+ffff3158:	39400022 	ldrb	w2, [x1]		; fetch from Q
+
+ffff315c:	aa0003f3 	mov	x19, x0			; "usb"
+
+ffff3160:	121b0440 	and	w0, w2, #0x60		; Q & 0x60
 ffff3164:	7101001f 	cmp	w0, #0x40
-ffff3168:	54000701 	b.ne	0xffff3248  // b.any
-ffff316c:	39400420 	ldrb	w0, [x1, #1]
+
+ffff3168:	54000701 	b.ne	0xffff3248
+
+ffff316c:	39400420 	ldrb	w0, [x1, #1]		; Q + 1
 ffff3170:	12000c00 	and	w0, w0, #0xf
 ffff3174:	7100301f 	cmp	w0, #0xc
-ffff3178:	54000221 	b.ne	0xffff31bc  // b.any
+ffff3178:	54000221 	b.ne	0xffff31bc
 
 ; Here we are using bit 0x4 in lucy
 ;  to select X or Y
@@ -5967,21 +6055,23 @@ ffff397c:	14000058 	b	0xffff3adc
 ffff3980:	f9420aa0 	ldr	x0, [x21, #0x410]	; "A" + 0 (points to B)
 ffff3984:	b9400e81 	ldr	w1, [x20, #12]		; "A" + 12 (offset)
 
-; read a 32 bit event
+; pull a 32 bit event off the event buffer
 ffff3988:	b8616800 	ldr	w0, [x0, x1]		; event = B:offset
 ffff398c:	b9000be0 	str	w0, [sp, #8]		; save event on stack
 
-; if low bit in event is set, skip the following
+; if low bit in event is set, hand it off to usb_one ()
+;   ( usb_one() handles "endpoint events" )
 ; if the bit is set, we will handle the event right here in usb_run
 ; it is something specific to the device itself
-; if it is not set, it is an "endpoint event"
-;    we fall through and
-;    hand it off to another routine:  usb_one()
+;   i.e. a "device event"
 
 ffff3990:	37000180 	tbnz	w0, #0, 0xffff39c0
 
+; it is an endpoint event ...
+
 ; fall through to here when bit 0 in the event was 0
 ; extract bitfield 4:1 (endpoint index 0 or 1)
+
 ffff3994:	53011400 	ubfx	w0, w0, #1, #5
 
 ; x1 = "usb" + field<<3
@@ -6016,9 +6106,18 @@ ffff39b8:	97fffc5c 	bl	0xffff2b28		; usb_one()
 
 ffff39bc:	14000050 	b	0xffff3afc		; next event ..
 
-; We branch here when bit 0 in the event was set
+; --------------------------------------
+
+; We branch here when bit 0 in the event was set (we have a "device event")
+
+; The (only) device events we handle are:
+;  -- Reset
+;  -- Connect done
+;  -- Disconnect
+
 ; check bits 7:1
 ; Checking that those bits are zero verifies that this is a "device event:
+
 ffff39c0:	121f1801 	and	w1, w0, #0xfe
 ffff39c4:	350009c1 	cbnz	w1, 0xffff3afc		; next event ..
 
