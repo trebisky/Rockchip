@@ -29,7 +29,7 @@ LDFLAGS		:=	-Bstatic \
 CC			=	$(CROSS_COMPILE)gcc $(CFLAGS)
 LD 			=	$(CROSS_COMPILE)gcc $(LDFLAGS)
 OBJCOPY			=	$(CROSS_COMPILE)objcopy
-DUMP			=	$(CROSS_COMPILE)objdump
+DUMP			=	$(CROSS_COMPILE)objdump -d
 
 LOAD			=	tools/loader -h64
 
@@ -45,6 +45,9 @@ LOAD			=	tools/loader -h64
 .S.o:
 	@echo " [CC]   $<"
 	@$(CC) $< -c -o $@
+
+rock.dump:
+	$(DUMP) rock.elf rock.dump
 
 # -------------------------------------
 

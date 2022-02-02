@@ -57,6 +57,20 @@ get_el(void)
         return val >> 2;
 }
 
+static inline void
+check_shift(void)
+{
+        unsigned int x, y;
+
+	x = 0xabc0;
+	printf ( "Shift input: %h\n", x );
+        // asm volatile("mrs %0, CurrentEL" : "=r" (val) : : "cc");
+	// asm volatile ( "lsr     w1, w6, #0" : : : "cc" );
+	// asm("mov %0, %1, ror #1" : "=r" (result) : "r" (value));
+	asm volatile ( "lsr     %0, %1, #0" : "=r" (y) : "r" (x) : "cc" );
+	printf ( "Shift result: %h\n", y );
+}
+
 void
 main ( void )
 {
@@ -91,6 +105,7 @@ main ( void )
 	// but apparently some kind of hypervisor is
 	// running at EL3.
 	printf ( "Current EL: %h\n", get_el() );
+	check_shift ();
 
 	printf ( "Blinking ...\n" );
 	/* This will run the blink demo */
