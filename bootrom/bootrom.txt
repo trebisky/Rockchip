@@ -300,6 +300,16 @@
 ;  In C code, this would be:
 ;	dest = (src >> lsb) & ((1 << width) - 1);
 
+;	lsr	w0, w0, #0
+;  the above raises an interesting issue, this particular case is a noop.
+;  but consider the following
+;	lsr	w0, w7, #0
+;  this just moves w7 to w0.  Why not just use a mov instruction?
+;  some sources say that only values of 1-31 are allowed.
+;  I wrote some test code and convinced myself by experiment that
+;  this just copies registers.
+;  It is odd that this is used in several places.
+
 ; ==========================================================================
 ; ==========================================================================
 
@@ -2493,12 +2503,14 @@ ffff1a54:	52800020 	mov	w0, #0x1
 ffff1a58:	97fffbf6 	bl	0xffff0a30		; xxdelay(1)
 ffff1a5c:	b94007e0 	ldr	w0, [sp, #4]		; w0 = x
 ffff1a60:	90000021 	adrp	x1, 0xffff5000
-ffff1a64:	b9406821 	ldr	w1, [x1, #0x68]
+
+ffff1a64:	b9406821 	ldr	w1, [x1, #0x68]		; w1 = bob
 ffff1a68:	11000402 	add	w2, w0, #0x1
 ffff1a6c:	b90007e2 	str	w2, [sp, #4]
 ffff1a70:	6b21401f 	cmp	w0, w1, uxtw
-ffff1a74:	54fffccb 	b.lt	0xffff1a0c  // b.tstop
+ffff1a74:	54fffccb 	b.lt	0xffff1a0c
 ffff1a78:	14000005 	b	0xffff1a8c
+
 ffff1a7c:	b94046a0 	ldr	w0, [x21, #0x44]
 ffff1a80:	52945001 	mov	w1, #0xa280                	// #41600
 ffff1a84:	0a010000 	and	w0, w0, w1
@@ -2507,6 +2519,7 @@ ffff1a8c:	12800000 	mov	w0, #0xffffffff            	// #-1
 ffff1a90:	b90046a0 	str	w0, [x21, #0x44]
 ffff1a94:	52a01018 	mov	w24, #0x800000              	// #8388608
 ffff1a98:	14000017 	b	0xffff1af4		; return
+
 ffff1a9c:	12800000 	mov	w0, #0xffffffff            	// #-1
 ffff1aa0:	b90046a0 	str	w0, [x21, #0x44]
 ffff1aa4:	368001f4 	tbz	w20, #16, 0xffff1ae0
@@ -2516,14 +2529,16 @@ ffff1ab0:	36480180 	tbz	w0, #9, 0xffff1ae0
 ffff1ab4:	52800020 	mov	w0, #0x1                   	// #1
 ffff1ab8:	97fffbde 	bl	0xffff0a30		; xxdelay(1)
 ffff1abc:	b94007e0 	ldr	w0, [sp, #4]
+
 ffff1ac0:	90000021 	adrp	x1, 0xffff5000
-ffff1ac4:	b9406c21 	ldr	w1, [x1, #0x6c]
+ffff1ac4:	b9406c21 	ldr	w1, [x1, #0x6c]		; ffff506c: 0003d091
 ffff1ac8:	11000402 	add	w2, w0, #0x1
 ffff1acc:	b90007e2 	str	w2, [sp, #4]
 ffff1ad0:	52808018 	mov	w24, #0x400                 	// #1024
 ffff1ad4:	6b21401f 	cmp	w0, w1, uxtw
 ffff1ad8:	54fffeab 	b.lt	0xffff1aac  // b.tstop
 ffff1adc:	14000002 	b	0xffff1ae4
+
 ffff1ae0:	2a1f03f8 	mov	w24, wzr
 ffff1ae4:	36300094 	tbz	w20, #6, 0xffff1af4	; return
 ffff1ae8:	b4000073 	cbz	x19, 0xffff1af4		; return
@@ -2711,6 +2726,7 @@ ffff1d74:	a94053f3 	ldp	x19, x20, [sp]
 ffff1d78:	a9417bfd 	ldp	x29, x30, [sp, #16]
 ffff1d7c:	910083ff 	add	sp, sp, #0x20
 ffff1d80:	d65f03c0 	ret
+
 ffff1d84:	d10203ff 	sub	sp, sp, #0x80
 ffff1d88:	a9077bfd 	stp	x29, x30, [sp, #112]
 ffff1d8c:	9101c3fd 	add	x29, sp, #0x70
@@ -3508,14 +3524,20 @@ ffff27e4:	aa1303e0 	mov	x0, x19
 ffff27e8:	aa1f03e1 	mov	x1, xzr
 ffff27ec:	94000724 	bl	0xffff447c		; memset ( "usb", 0x80, 0 )
 
-; This fetches a USB hardware base address
+; This fetches the USB hardware base address
 ffff27f0:	f0000000 	adrp	x0, 0xffff5000
 ffff27f4:	b9412800 	ldr	w0, [x0, #0x128]	; ffff5128: fe80c100
 
-ffff27f8:	f9002660 	str	x0, [x19, #0x48]	; usb_48 = BASE
+ffff27f8:	f9002660 	str	x0, [x19, #0x48]	; "usb" + 48 = usb_hw
+
+; We set this to 3 here and
+; reference it in one place to set USB high speed
 ffff27fc:	52800060 	mov	w0, #0x3
 ffff2800:	b9005660 	str	w0, [x19, #0x54]	; usb_54 = 3
-ffff2804:	b900627f 	str	wzr, [x19, #0x60]	; usb_60 = 0
+
+; This starts out set to 0
+; later gets set to 5, 6, or 7
+ffff2804:	b900627f 	str	wzr, [x19, #0x60]	; pete = 0
 
 ; now another small block "sram-A"
 ;
@@ -3541,8 +3563,11 @@ ffff280c:	91104034 	add	x20, x1, #0x410		; SRAM + 0x410 "sram-A"
 ffff2810:	f9000a9f 	str	xzr, [x20, #16]		; clear 8 bytes
 ffff2814:	f900069f 	str	xzr, [x20, #8]		; this clears 12 also
 ffff2818:	f902083f 	str	xzr, [x1, #0x410]	; will be overwritten by B
+
+; we set this, but never use it anywhere
 ffff281c:	52800020 	mov	w0, #0x1
-ffff2820:	b9005260 	str	w0, [x19, #0x50]	; usb_50 = 1
+ffff2820:	b9005260 	str	w0, [x19, #0x50]	; "usb" + 0x50 = 1
+
 ffff2824:	f9001293 	str	x19, [x20, #32]		; "usb"
 
 ffff2828:	52802000 	mov	w0, #0x100
@@ -3654,7 +3679,8 @@ ffff28f8:	b9401001 	ldr	w1, [x0, #16]
 ffff28fc:	121a7021 	and	w1, w1, #0xffffffc7
 ffff2900:	b9001001 	str	w1, [x0, #16]
 
-ffff2904:	b9405660 	ldr	w0, [x19, #0x54]
+; This is the only reference.  It is set to 3 at initialization
+ffff2904:	b9405660 	ldr	w0, [x19, #0x54]	; fetch 3
 ffff2908:	71000c1f 	cmp	w0, #0x3
 ffff290c:	540000a1 	b.ne	0xffff2920  // b.any
 
@@ -3751,11 +3777,11 @@ ffff29d0:	d65f03c0 	ret
 
 ; =====================
 
-;  usb_transfer_x ( "usb" )
+;  usb_start_transfer_x ( "usb" )
 
 ; called from one place below -- 
 ; this basically sets up the registers as
-; if we were calling usb_transfer(), but we fall through into it.
+; if we were calling usb_start_transfer(), but we fall through into it.
 
 ffff29d4:	f9400c02 	ldr	x2, [x0, #24]	; sram-J
 ffff29d8:	52800103 	mov	w3, #0x8
@@ -3765,18 +3791,18 @@ ffff29e4:	aa1f03e5 	mov	x5, xzr
 
 ; a second argument of 0 locks this to X (EP0-OUT)
 
-; usb_transfer ( "usb", 0, J, 8, 0x20, 0 )
+; usb_start_transfer ( "usb", 0, J, 8, 0x20, 0 )
 
 ; the reference to "sram-J" suggests we might be reading into sram-J,
 ; especially given that at this stage it is a bunch of zeros.
 ; sram-J is 64 bytes in size
 
-ffff29e8:	14000001 	b	0xffff29ec		; usb_transfer ()
+ffff29e8:	14000001 	b	0xffff29ec		; usb_start_transfer ()
 ; The above branch is sort of silly
 
 ; ============================================================================================
 
-; subroutine usb_transfer ()
+; subroutine usb_start_transfer ()
 ; note that we have the odd "fall through" from above
 
 ; arguments:
@@ -3787,51 +3813,63 @@ ffff29e8:	14000001 	b	0xffff29ec		; usb_transfer ()
 ;   x4 = B
 ;   x5 = flag -- 0 or 1
 
-I had thought x4 was a count, but now I am not so sure.
+; I had thought x4 was a count, but now I am not so sure. !!??
 
 ; a typical call is:
-; usb_transfer ( "usb", 0, usb+24 (sram-J), 8, 0x20, 0 )
+; usb_start_transfer ( "usb", 0, usb+24 (sram-J), 8, 0x20, 0 )
 
-ffff29ec:	d100c3ff 	sub	sp, sp, #0x30
+ffff29ec:	d100c3ff 	sub	sp, sp, #0x30		; prolog
 ffff29f0:	a9027bfd 	stp	x29, x30, [sp, #32]
 ffff29f4:	910083fd 	add	x29, sp, #0x20
 ffff29f8:	a90153f3 	stp	x19, x20, [sp, #16]
 
-; We expect x1 to be either 0 or 1
-; this does some trickery to get x20
-; to point to either 0x38 (i.e. X) or 0x40 (i.e. Y)
+; x1 (endpoint index) will be either 0 or 1
+; this does some trickery to get X/Y and put it in x20
 ; note that the add shifts the byte in w1 by 3 (a multiply by 8)
 ; then zero extends (uxtb) the result.
 
 ffff29fc:	aa0003f3 	mov	x19, x0			; x19 = "usb"
 ffff2a00:	8b210e60 	add	x0, x19, w1, uxtb #3
-ffff2a04:	f9401c14 	ldr	x20, [x0, #0x38]	; X or Y
+ffff2a04:	f9401c14 	ldr	x20, [x0, #0x38]	; x20 = X/Y
 
 ; Check this bit 0x10 bit 4 and if it is set, skip the whole game.
 ; Note that this bit is set at the end of this code.
-; Is it some kind of "transfer in progress" flag,
-; and if so, where is it cleared?
+; It must be some kind of "transfer in progress" flag (TIP)
+;    if so, where is it cleared?
 
-ffff2a08:	39406280 	ldrb	w0, [x20, #24]
-ffff2a0c:	37200860 	tbnz	w0, #4, 0xffff2b18	; return
+ffff2a08:	39406280 	ldrb	w0, [x20, #24]		; "sue"
+ffff2a0c:	37200860 	tbnz	w0, #4, 0xffff2b18	; return if TIP set
 
-ffff2a10:	b9400286 	ldr	w6, [x20]		; count
+; This business of the counter in [x20] baffles me.
+; it seems that it would count along forever
+; and cause us to offset into K further and further along.
+;  K is only 32 bytes in size.
+
+; call this counter "wally"
+; it does get set back to 0 when usb_one() handles a "xfer complete"
+; apparently it is only possible to have at most 2 pending transfers.
+
+ffff2a10:	b9400286 	ldr	w6, [x20]		; counter from X/Y + 0 (wally)
 ffff2a14:	f9400660 	ldr	x0, [x19, #8]		; sram-K
-ffff2a18:	53007cc1 	lsr	w1, w6, #0		; w1 = w6
+ffff2a18:	53007cc1 	lsr	w1, w6, #0		; w1 = w6 (wally)
 
-; test flag (usually 0, sometimes 1)
-; if it is 1, increment a counter in X/Y
+; test flag argument (usually 0, sometimes 1)
+; if it is 1, increment the counter in X/Y
 ffff2a1c:	34000065 	cbz	w5, 0xffff2a28
-ffff2a20:	110004c6 	add	w6, w6, #0x1		; w6++
+ffff2a20:	110004c6 	add	w6, w6, #0x1		; w6++  (wally++)
 ffff2a24:	b9000286 	str	w6, [x20]
 
 ffff2a28:	8b217006 	add	x6, x0, x1, uxtx #4	; x6 = sram-K + count<<4
 ffff2a2c:	d37cec21 	lsl	x1, x1, #4		; count *= 16
 
-; We are going to move the address in w2, byte by byte into sram-K
+; We are going to move the 64 bit address in x2, byte by byte into sram-K
 ; x0 points to sram-K at the very start
 ; x6 is offset into sram-K by count*16
 ; let's denote that offset location "KK"
+; 
+; All told we move 16 bytes into K, which is 32 bytes in size.
+; if count is anything other than 0 or 1, we are in trouble,
+; but I don't see any guard against that here.
 
 ; move w2 (buf) 8 bytes
 ffff2a30:	38216802 	strb	w2, [x0, x1]		; KK[0] = w2>>0
@@ -3850,7 +3888,7 @@ ffff2a60:	d368fc41 	lsr	x1, x2, #40
 ffff2a64:	390014c1 	strb	w1, [x6, #5]		; kk[5] = x2>>40
 ffff2a68:	390010c0 	strb	w0, [x6, #4]		; kk[4] = x2>>32
 
-; move w3 (A) 4 bytes
+; move w3 (arg A) 4 bytes
 ffff2a6c:	53187c60 	lsr	w0, w3, #24
 ffff2a70:	39002cc0 	strb	w0, [x6, #11]		; kk[11] = w3>>24
 ffff2a74:	53107c60 	lsr	w0, w3, #16
@@ -3865,7 +3903,7 @@ ffff2a8c:	52818060 	mov	w0, #0xc03	; for flag == 0
 ffff2a90:	528080a1 	mov	w1, #0x405	; for flag == 1
 ffff2a94:	1a801020 	csel	w0, w1, w0, ne
 
-ffff2a98:	2a040000 	orr	w0, w0, w4	; combine with w4 (B)
+ffff2a98:	2a040000 	orr	w0, w0, w4	; combine with w4 (arg B)
 
 ffff2a9c:	53187c01 	lsr	w1, w0, #24
 ffff2aa0:	39003cc1 	strb	w1, [x6, #15]		; kk[15] = w4>>24
@@ -3902,10 +3940,11 @@ ffff2ae8:	5400018b 	b.lt	0xffff2b18		; we failed !
 ; this particular bit is checked up at the top of
 ; this routine, and if it is set, the entire routine
 ; is skipped.
+; I call this bit TIP (transfer in progress)
 
-ffff2aec:	b9401a80 	ldr	w0, [x20, #24]
-ffff2af0:	321c0000 	orr	w0, w0, #0x10		; set bit 4
-ffff2af4:	b9001a80 	str	w0, [x20, #24]
+ffff2aec:	b9401a80 	ldr	w0, [x20, #24]		; "sue"
+ffff2af0:	321c0000 	orr	w0, w0, #0x10		; set bit 4 (TIP)
+ffff2af4:	b9001a80 	str	w0, [x20, #24]		; "sue"
 
 ; Read a usb hw register offset from at c80c
 ; we calculate x0 = ep-index * 16, then use that
@@ -3920,12 +3959,13 @@ ffff2af4:	b9001a80 	str	w0, [x20, #24]
 ffff2af8:	f9402660 	ldr	x0, [x19, #0x48]	; usb hw
 ffff2afc:	39408281 	ldrb	w1, [x20, #32]		; get ep index
 ffff2b00:	8b217000 	add	x0, x0, x1, uxtx #4
-ffff2b04:	b9470c00 	ldr	w0, [x0, #0x70c]	; read USB
+
+ffff2b04:	b9470c00 	ldr	w0, [x0, #0x70c]	; read
 ffff2b08:	53105800 	ubfx	w0, w0, #16, #7
 ffff2b0c:	39008a80 	strb	w0, [x20, #0x22]	; usb transfer index
 
 ffff2b10:	52800020 	mov	w0, #0x1
-ffff2b14:	b9005a60 	str	w0, [x19, #0x58]	; usb_58 = 1
+ffff2b14:	b9005a60 	str	w0, [x19, #0x58]	; jane = 1
 
 ; done
 ffff2b18:	a94153f3 	ldp	x19, x20, [sp, #16]
@@ -3933,7 +3973,7 @@ ffff2b1c:	a9427bfd 	ldp	x29, x30, [sp, #32]
 ffff2b20:	9100c3ff 	add	sp, sp, #0x30
 ffff2b24:	d65f03c0 	ret
 
-# END of usb_transfer
+# END of usb_start_transfer
 
 ;  ==============================================================
 ;  ==============================================================
@@ -4016,14 +4056,14 @@ ffff2b6c:	54000921 	b.ne	0xffff2c90
 ; -----------------------------------
 ; Handling a Xfer not Ready
 
-; A quick note on the field at 'usb' + 0x65
+; A quick note on the field at 'usb' + 0x65 (lucy)
 ; this is used extensively in many routines
-; I am going to just call it "usb_flags"
+; We independently use 7 bits within it
+; bit 0x80 is never used.
 
-; usb_flags |= 0x8
 ffff2b70:	39419661 	ldrb	w1, [x19, #0x65]
 ffff2b74:	321d0020 	orr	w0, w1, #0x8
-ffff2b78:	39019660 	strb	w0, [x19, #0x65]
+ffff2b78:	39019660 	strb	w0, [x19, #0x65]	; lucy |= 0x8
 
 ; This seems downright stupid, why didn't we save
 ; the event from above?    Here we go again.
@@ -4044,9 +4084,11 @@ ffff2b98:	530c3c43 	ubfx	w3, w2, #12, #4
 ffff2b9c:	7100087f 	cmp	w3, #0x2
 ffff2ba0:	54000ee1 	b.ne	0xffff2d7c
 
-; it is  short !
+; process Xfer not Ready and short
 
-ffff2ba4:	b9405a61 	ldr	w1, [x19, #0x58]	; 'usb' + 0x58
+; "jane" is either 1 or 3
+; this is the only place we test it
+ffff2ba4:	b9405a61 	ldr	w1, [x19, #0x58]	; jane
 ffff2ba8:	71000c3f 	cmp	w1, #0x3
 ffff2bac:	54002981 	b.ne	0xffff30dc		return if ne 3
 
@@ -4060,25 +4102,27 @@ ffff2bc0:	39401021 	ldrb	w1, [x1, #4]
 ffff2bc4:	2a022021 	orr	w1, w1, w2, lsl #8
 
 ; why this odd value ?
-ffff2bc8:	7111c43f 	cmp	w1, #0x471
+ffff2bc8:	7111c43f 	cmp	w1, #0x471		; 0x471 magic
 ffff2bcc:	540000a0 	b.eq	0xffff2be0
 
 ffff2bd0:	aa1303e0 	mov	x0, x19			; "usb"
 ffff2bd4:	aa1403e1 	mov	x1, x20			; ptr to event
 ffff2bd8:	94000147 	bl	0xffff30f4		; usb_xfer2 ( "usb" )
 
-; test bit 0x20 in usb_flags
-ffff2bdc:	39419660 	ldrb	w0, [x19, #0x65]
-ffff2be0:	36280440 	tbz	w0, #5, 0xffff2c68
-ffff2be4:	7940da60 	ldrh	w0, [x19, #0x6c]
+ffff2bdc:	39419660 	ldrb	w0, [x19, #0x65]	; lucy
+ffff2be0:	36280440 	tbz	w0, #5, 0xffff2c68	; test 0x20
 
+ffff2be4:	7940da60 	ldrh	w0, [x19, #0x6c]	; "joe"
 ffff2be8:	12002c00 	and	w0, w0, #0xfff
-ffff2bec:	340003e0 	cbz	w0, 0xffff2c68
-ffff2bf0:	f9400260 	ldr	x0, [x19]
+ffff2bec:	340003e0 	cbz	w0, 0xffff2c68		; we only test "joe"
+
+ffff2bf0:	f9400260 	ldr	x0, [x19]		; sram-J
+
 ffff2bf4:	39401401 	ldrb	w1, [x0, #5]
 ffff2bf8:	39401000 	ldrb	w0, [x0, #4]
-ffff2bfc:	2a012000 	orr	w0, w0, w1, lsl #8
-ffff2c00:	7111c81f 	cmp	w0, #0x472
+ffff2bfc:	2a012000 	orr	w0, w0, w1, lsl #8	; assemble 16 bits
+
+ffff2c00:	7111c81f 	cmp	w0, #0x472		; 0x472 magic
 ffff2c04:	54000241 	b.ne	0xffff2c4c  // b.any
 
 ; still in usb_one ()
@@ -4121,21 +4165,21 @@ ffff2c40:	39401401 	ldrb	w1, [x0, #5]
 ffff2c44:	39401000 	ldrb	w0, [x0, #4]
 ffff2c48:	2a012000 	orr	w0, w0, w1, lsl #8
 
-ffff2c4c:	f9403a61 	ldr	x1, [x19, #0x70]
-ffff2c50:	b9406a62 	ldr	w2, [x19, #0x68]
-ffff2c54:	940003de 	bl	0xffff3bcc		; usb_try_run ()
+ffff2c4c:	f9403a61 	ldr	x1, [x19, #0x70]	; sam
+ffff2c50:	b9406a62 	ldr	w2, [x19, #0x68]	; bob
+ffff2c54:	940003de 	bl	0xffff3bcc		; usb_try_run ( sram-J, sam, bob)
 
-; clear bit 0x20 in usb_flags
-ffff2c58:	39419660 	ldrb	w0, [x19, #0x65]
+ffff2c58:	39419660 	ldrb	w0, [x19, #0x65]	; lucy
 ffff2c5c:	52801be1 	mov	w1, #0xdf
 ffff2c60:	0a010000 	and	w0, w0, w1
-ffff2c64:	39019660 	strb	w0, [x19, #0x65]
+ffff2c64:	39019660 	strb	w0, [x19, #0x65]	; clear 0x20 in lucy
 
 ffff2c68:	f9400260 	ldr	x0, [x19]
 ffff2c6c:	39401401 	ldrb	w1, [x0, #5]
 ffff2c70:	39401000 	ldrb	w0, [x0, #4]
-ffff2c74:	2a012000 	orr	w0, w0, w1, lsl #8
-ffff2c78:	7111c41f 	cmp	w0, #0x471
+ffff2c74:	2a012000 	orr	w0, w0, w1, lsl #8	; assemble 16 bits
+
+ffff2c78:	7111c41f 	cmp	w0, #0x471		; 0x471 magic
 ffff2c7c:	54002301 	b.ne	0xffff30dc		; return if ne 0x471
 
 ffff2c80:	aa1303e0 	mov	x0, x19			; "usb"
@@ -4153,26 +4197,30 @@ ffff2c8c:	14000114 	b	0xffff30dc		; return
 ffff2c90:	7100043f 	cmp	w1, #0x1
 ffff2c94:	54002241 	b.ne	0xffff30dc		; return
 
-; Xfer complete ***
+; ---------------------------------------
+; ---------------------------------------
+; Handle Xfer complete ***
 
 ; get 5:1 (endpoint number)
 ffff2c98:	53011400 	ubfx	w0, w0, #1, #5
 
 ffff2c9c:	8b204e60 	add	x0, x19, w0, uxtw #3
 ffff2ca0:	f9401c00 	ldr	x0, [x0, #0x38]		; X or Y
-ffff2ca4:	b9401801 	ldr	w1, [x0, #24]		; X/Y + 24
-ffff2ca8:	121b7821 	and	w1, w1, #0xffffffef	; clear 0x10
-ffff2cac:	b9001801 	str	w1, [x0, #24]
+
+; clear transfer in progress bit
+ffff2ca4:	b9401801 	ldr	w1, [x0, #24]		; X/Y + 24  "sue"
+ffff2ca8:	121b7821 	and	w1, w1, #0xffffffef	; clear bit 0x10 (TIP)
+ffff2cac:	b9001801 	str	w1, [x0, #24]		; "sue"
+
 ffff2cb0:	3900881f 	strb	wzr, [x0, #0x22]	; X/Y + 22 = 0
 
-; clear bit 0x1 in usb_flags
-ffff2cb4:	39419660 	ldrb	w0, [x19, #0x65]
+ffff2cb4:	39419660 	ldrb	w0, [x19, #0x65]	; lucy
 ffff2cb8:	121c7802 	and	w2, w0, #0xfffffff7
-ffff2cbc:	39019662 	strb	w2, [x19, #0x65]
+ffff2cbc:	39019662 	strb	w2, [x19, #0x65]	; clear 0x01 in lucy
 
 ; this is the only place this field is inspected
 ; -- I have called it "xfer_code"
-; it gets set before calls to usb_xfer* and usb_transfer
+; it gets set before calls to usb_xfer* and usb_start_transfer
 ; values set are 1,2, or 3  --  so we have 3 cases here
 ;
 ; in fact this routine sets the value back to 1 below
@@ -4180,14 +4228,16 @@ ffff2cbc:	39019662 	strb	w2, [x19, #0x65]
 
 ffff2cc0:	b9405e61 	ldr	w1, [x19, #0x5c]	; get xfer_code
 ffff2cc4:	71000c3f 	cmp	w1, #0x3
-ffff2cc8:	54000820 	b.eq	0xffff2dcc		; == 3
+ffff2cc8:	54000820 	b.eq	0xffff2dcc		; == 3 ?
 
 ffff2ccc:	7100083f 	cmp	w1, #0x2
-ffff2cd0:	54000841 	b.ne	0xffff2dd8		; must be 1
+ffff2cd0:	54000841 	b.ne	0xffff2dd8		; branch must be 1
 
 ; ----------------------------------
-; fall through for xfer_code == 2
+; fall through for Xfer complete, xfer_code == 2
 
+; Once again, assemble the event using the event pointer in x20
+; the event will be in w2
 ffff2cd4:	39400e81 	ldrb	w1, [x20, #3]
 ffff2cd8:	39400a82 	ldrb	w2, [x20, #2]
 ffff2cdc:	2a012041 	orr	w1, w2, w1, lsl #8
@@ -4195,40 +4245,52 @@ ffff2ce0:	39400682 	ldrb	w2, [x20, #1]
 ffff2ce4:	39400283 	ldrb	w3, [x20]
 ffff2ce8:	2a022062 	orr	w2, w3, w2, lsl #8
 ffff2cec:	2a014042 	orr	w2, w2, w1, lsl #16
-ffff2cf0:	f9401e75 	ldr	x21, [x19, #0x38]
+
+; why X with no questions asked (EP0-OUT) ?
+ffff2cf0:	f9401e75 	ldr	x21, [x19, #0x38]	; X
 ffff2cf4:	52800061 	mov	w1, #0x3
-ffff2cf8:	b9005a61 	str	w1, [x19, #0x58]
-ffff2cfc:	f9400666 	ldr	x6, [x19, #8]
+ffff2cf8:	b9005a61 	str	w1, [x19, #0x58]	; jane = 3
+
+ffff2cfc:	f9400666 	ldr	x6, [x19, #8]		; sram-K
+
 ffff2d00:	53017c56 	lsr	w22, w2, #1
-ffff2d04:	b9406a65 	ldr	w5, [x19, #0x68]
-ffff2d08:	394024c1 	ldrb	w1, [x6, #9]
-ffff2d0c:	394020c3 	ldrb	w3, [x6, #8]
+
+ffff2d04:	b9406a65 	ldr	w5, [x19, #0x68]	; w5 = bob (a count)
+ffff2d08:	394024c1 	ldrb	w1, [x6, #9]		; K+9
+ffff2d0c:	394020c3 	ldrb	w3, [x6, #8]		; K+8
 ffff2d10:	2a012063 	orr	w3, w3, w1, lsl #8
-ffff2d14:	394028c4 	ldrb	w4, [x6, #10]
-ffff2d18:	7940da61 	ldrh	w1, [x19, #0x6c]
+ffff2d14:	394028c4 	ldrb	w4, [x6, #10]		; K+10
+
+ffff2d18:	7940da61 	ldrh	w1, [x19, #0x6c]	; "joe"
 ffff2d1c:	53011454 	ubfx	w20, w2, #1, #5
-ffff2d20:	2a044063 	orr	w3, w3, w4, lsl #16
-ffff2d24:	53007ca2 	lsr	w2, w5, #0
+
+ffff2d20:	2a044063 	orr	w3, w3, w4, lsl #16	; 24 bit value
+ffff2d24:	53007ca2 	lsr	w2, w5, #0		; w2 = w5 = bob
 ffff2d28:	36080780 	tbz	w0, #1, 0xffff2e18
-ffff2d2c:	f9400aa0 	ldr	x0, [x21, #16]
+
+ffff2d2c:	f9400aa0 	ldr	x0, [x21, #16]		; X + 16
 ffff2d30:	39401404 	ldrb	w4, [x0, #5]
 ffff2d34:	39401007 	ldrb	w7, [x0, #4]
-ffff2d38:	f9403a60 	ldr	x0, [x19, #0x70]
+
+ffff2d38:	f9403a60 	ldr	x0, [x19, #0x70]	; x0 = sam (addr in SRAM)
 ffff2d3c:	2a0420e4 	orr	w4, w7, w4, lsl #8
-ffff2d40:	7101043f 	cmp	w1, #0x41
+ffff2d40:	7101043f 	cmp	w1, #0x41		; test "joe"
 ffff2d44:	540006e3 	b.cc	0xffff2e20
+
 ffff2d48:	1ac40827 	udiv	w7, w1, w4
 ffff2d4c:	1b047ce8 	mul	w8, w7, w4
 ffff2d50:	4b234107 	sub	w7, w8, w3, uxtw
 ffff2d54:	0b2540e3 	add	w3, w7, w5, uxtw
-ffff2d58:	b9006a63 	str	w3, [x19, #0x68]
-ffff2d5c:	394064c3 	ldrb	w3, [x6, #25]
-ffff2d60:	394060c5 	ldrb	w5, [x6, #24]
-ffff2d64:	394068c6 	ldrb	w6, [x6, #26]
+ffff2d58:	b9006a63 	str	w3, [x19, #0x68]	; bob = w3
+
+ffff2d5c:	394064c3 	ldrb	w3, [x6, #25]		; K+25
+ffff2d60:	394060c5 	ldrb	w5, [x6, #24]		; K+24
+ffff2d64:	394068c6 	ldrb	w6, [x6, #26]		; K+26
 ffff2d68:	8b274042 	add	x2, x2, w7, uxtw
 ffff2d6c:	2a0320a3 	orr	w3, w5, w3, lsl #8
-ffff2d70:	2a064063 	orr	w3, w3, w6, lsl #16
-ffff2d74:	b90002bf 	str	wzr, [x21]
+ffff2d70:	2a064063 	orr	w3, w3, w6, lsl #16	; 24 bit value
+
+ffff2d74:	b90002bf 	str	wzr, [x21]		; "wally" = 0
 ffff2d78:	1400002c 	b	0xffff2e28
 
 ; ---------------------------------
@@ -4246,7 +4308,7 @@ ffff2d88:	53011441 	ubfx	w1, w2, #1, #5
 ffff2d8c:	6b21401f 	cmp	w0, w1, uxtw
 ffff2d90:	54001a60 	b.eq	0xffff30dc		; return if ...
 ffff2d94:	8b200e60 	add	x0, x19, w0, uxtb #3
-ffff2d98:	f9401c14 	ldr	x20, [x0, #0x38]
+ffff2d98:	f9401c14 	ldr	x20, [x0, #0x38]	; X/Y ???
 ffff2d9c:	39408a80 	ldrb	w0, [x20, #0x22]
 ffff2da0:	340017c0 	cbz	w0, 0xffff3098
 ffff2da4:	910023e3 	add	x3, sp, #0x8
@@ -4272,13 +4334,13 @@ ffff2dc4:	39008a9f 	strb	wzr, [x20, #0x22]
 ffff2dc8:	140000b4 	b	0xffff3098
 
 ; ---------------------------
-; here when xfer_code == 3
+; here when Xfer complete, xfer_code == 3
 ffff2dcc:	52800020 	mov	w0, #0x1
-ffff2dd0:	b9005e60 	str	w0, [x19, #0x5c]
+ffff2dd0:	b9005e60 	str	w0, [x19, #0x5c]	; xfer_code = 1
 ffff2dd4:	140000bb 	b	0xffff30c0
 
 ; ---------------------------
-; here when xfer_code == 1
+; here when Xfer complete, xfer_code == 1
 ; the check here is a belt and suspenders assertion check
 ;  (should never happen)
 
@@ -4291,10 +4353,9 @@ ffff2de8:	39401824 	ldrb	w4, [x1, #6]
 ffff2dec:	2a032083 	orr	w3, w4, w3, lsl #8
 ffff2df0:	340007a3 	cbz	w3, 0xffff2ee4
 
-; w2 still holds usb_flags from way above
-; set bit 0x40
+; w2 still holds lucy from way above
 ffff2df4:	321a0040 	orr	w0, w2, #0x40
-ffff2df8:	39019660 	strb	w0, [x19, #0x65]
+ffff2df8:	39019660 	strb	w0, [x19, #0x65]	; lucy = w2 | 0x40
 
 ; Here is the only place in this code you find the "bfi" instruction
 ;  it is "bit field insert"
@@ -4304,19 +4365,22 @@ ffff2df8:	39019660 	strb	w0, [x19, #0x65]
 ;  the field always starts at bit 0 (rightmost) in the source.
 ;  So this case copies one bit, but slides it over 2 to the left
 ;  So we are screwing with bit 0x4 in w0
-;  (and w0 is the last value we fiddled with in usb_flags
+;  (and w0 is the last value we fiddled with in lucy
 ; 
 ffff2dfc:	39400022 	ldrb	w2, [x1]
 ffff2e00:	53077c42 	lsr	w2, w2, #7
 ffff2e04:	331e0040 	bfi	w0, w2, #2, #1
 
 ffff2e08:	121c7800 	and	w0, w0, #0xfffffff7
-ffff2e0c:	39019660 	strb	w0, [x19, #0x65]
+ffff2e0c:	39019660 	strb	w0, [x19, #0x65]	; lucy = w0 & ~0x8
 
-ffff2e10:	52800042 	mov	w2, #0x2                   	// #2
+ffff2e10:	52800042 	mov	w2, #0x2
 ffff2e14:	14000038 	b	0xffff2ef4
+
 ffff2e18:	4b234037 	sub	w23, w1, w3, uxtw
 ffff2e1c:	14000011 	b	0xffff2e60
+
+; branch here from above (ffff2d44) when w1 == 0x41
 ffff2e20:	2a1f03e7 	mov	w7, wzr
 ffff2e24:	2a1f03e8 	mov	w8, wzr
 
@@ -4330,33 +4394,36 @@ ffff2e40:	4b274024 	sub	w4, w1, w7, uxtw
 ffff2e44:	4b234042 	sub	w2, w2, w3, uxtw
 ffff2e48:	f9400a61 	ldr	x1, [x19, #16]
 ffff2e4c:	6b22409f 	cmp	w4, w2, uxtw
-ffff2e50:	1a823097 	csel	w23, w4, w2, cc
-ffff2e54:	53007ee2 	lsr	w2, w23, #0		; shift by 0 ?
-ffff2e58:	9400057e 	bl	0xffff4450		; memcpy
-ffff2e5c:	b9406a65 	ldr	w5, [x19, #0x68]
-ffff2e60:	0b2542e0 	add	w0, w23, w5, uxtw
-ffff2e64:	b9006a60 	str	w0, [x19, #0x68]
-ffff2e68:	36000096 	tbz	w22, #0, 0xffff2e78
-ffff2e6c:	7940da61 	ldrh	w1, [x19, #0x6c]
-ffff2e70:	6b21401f 	cmp	w0, w1, uxtw
-ffff2e74:	54001123 	b.cc	0xffff3098  // b.lo, b.ul, b.last
 
-; test 0x2 in usb_flags
-ffff2e78:	39419660 	ldrb	w0, [x19, #0x65]
-ffff2e7c:	360800c0 	tbz	w0, #1, 0xffff2e94
+ffff2e50:	1a823097 	csel	w23, w4, w2, cc
+ffff2e54:	53007ee2 	lsr	w2, w23, #0		; w2 = w23
+ffff2e58:	9400057e 	bl	0xffff4450		; memcpy
+
+ffff2e5c:	b9406a65 	ldr	w5, [x19, #0x68]	; bob
+ffff2e60:	0b2542e0 	add	w0, w23, w5, uxtw	; bob += w23
+ffff2e64:	b9006a60 	str	w0, [x19, #0x68]	; bob
+
+ffff2e68:	36000096 	tbz	w22, #0, 0xffff2e78
+
+ffff2e6c:	7940da61 	ldrh	w1, [x19, #0x6c]	; "joe"
+ffff2e70:	6b21401f 	cmp	w0, w1, uxtw
+ffff2e74:	54001123 	b.cc	0xffff3098
+
+ffff2e78:	39419660 	ldrb	w0, [x19, #0x65]	; lucy
+ffff2e7c:	360800c0 	tbz	w0, #1, 0xffff2e94	; test 0x2
 
 ffff2e80:	394082a1 	ldrb	w1, [x21, #32]
 ffff2e84:	35000081 	cbnz	w1, 0xffff2e94
 
-; clear bit 0x2 in usb_flags
 ffff2e88:	52801fa1 	mov	w1, #0xfd
 ffff2e8c:	0a010000 	and	w0, w0, w1
-ffff2e90:	39019660 	strb	w0, [x19, #0x65]
+ffff2e90:	39019660 	strb	w0, [x19, #0x65]	; lucy &= ~0x2
 
 ffff2e94:	f9400aa0 	ldr	x0, [x21, #16]
 ffff2e98:	39401401 	ldrb	w1, [x0, #5]
 ffff2e9c:	39401002 	ldrb	w2, [x0, #4]
-ffff2ea0:	7940da60 	ldrh	w0, [x19, #0x6c]
+
+ffff2ea0:	7940da60 	ldrh	w0, [x19, #0x6c]	; "joe"
 ffff2ea4:	2a012041 	orr	w1, w2, w1, lsl #8
 ffff2ea8:	529fffe2 	mov	w2, #0xffff                	// #65535
 ffff2eac:	0b224021 	add	w1, w1, w2, uxtw
@@ -4365,31 +4432,34 @@ ffff2eb4:	35001141 	cbnz	w1, 0xffff30dc		; return
 ffff2eb8:	34001120 	cbz	w0, 0xffff30dc		; return
 ffff2ebc:	3941e260 	ldrb	w0, [x19, #0x78]
 ffff2ec0:	340010e0 	cbz	w0, 0xffff30dc		; return
-ffff2ec4:	52800020 	mov	w0, #0x1                   	// #1
-ffff2ec8:	b9005a60 	str	w0, [x19, #0x58]
-ffff2ecc:	f9400e62 	ldr	x2, [x19, #24]
-ffff2ed0:	52800a04 	mov	w4, #0x50                  	// #80
+ffff2ec4:	52800020 	mov	w0, #0x1
+ffff2ec8:	b9005a60 	str	w0, [x19, #0x58]	; jane = 1
+ffff2ecc:	f9400e62 	ldr	x2, [x19, #24]		; sram-J
+ffff2ed0:	52800a04 	mov	w4, #0x50
 ffff2ed4:	aa1303e0 	mov	x0, x19
 ffff2ed8:	aa1403e1 	mov	x1, x20
 ffff2edc:	aa1f03e3 	mov	x3, xzr
 ffff2ee0:	1400007d 	b	0xffff30d4
 
-; clear bits 0x40, 0x8, and 0x4 in usb_flags
-ffff2ee4:	52801662 	mov	w2, #0xb3                  	// #179
+; clear bits 0x40, 0x8, and 0x4 in lucy
+ffff2ee4:	52801662 	mov	w2, #0xb3		; w2 = 0xb3
 ffff2ee8:	0a020000 	and	w0, w0, w2
-ffff2eec:	39019660 	strb	w0, [x19, #0x65]
+ffff2eec:	39019660 	strb	w0, [x19, #0x65]	; lucy &= 0xb3
 
-ffff2ef0:	52800062 	mov	w2, #0x3                   	// #3
-ffff2ef4:	b9005a62 	str	w2, [x19, #0x58]
+ffff2ef0:	52800062 	mov	w2, #0x3
+ffff2ef4:	b9005a62 	str	w2, [x19, #0x58]	; jane = 3
 
 ffff2ef8:	39400022 	ldrb	w2, [x1]
 ffff2efc:	121b0442 	and	w2, w2, #0x60
 ffff2f00:	35000782 	cbnz	w2, 0xffff2ff0
 ffff2f04:	39400422 	ldrb	w2, [x1, #1]
+
 ffff2f08:	7100245f 	cmp	w2, #0x9
-ffff2f0c:	540002c0 	b.eq	0xffff2f64  // b.none
+ffff2f0c:	540002c0 	b.eq	0xffff2f64
+
 ffff2f10:	7100185f 	cmp	w2, #0x6
-ffff2f14:	54000481 	b.ne	0xffff2fa4  // b.any
+ffff2f14:	54000481 	b.ne	0xffff2fa4
+
 ffff2f18:	39400c22 	ldrb	w2, [x1, #3]
 ffff2f1c:	53020803 	ubfx	w3, w0, #2, #1
 ffff2f20:	8b234e63 	add	x3, x19, w3, uxtw #3
@@ -4404,35 +4474,42 @@ ffff2f40:	7100281f 	cmp	w0, #0xa
 ffff2f44:	52800401 	mov	w1, #0x20                  	// #32
 ffff2f48:	1a813015 	csel	w21, w0, w1, cc  // cc = lo, ul, last
 ffff2f4c:	53007ea2 	lsr	w2, w21, #0
+
 ffff2f50:	d0ffc660 	adrp	x0, 0xff8c0000
 ffff2f54:	91070000 	add	x0, x0, #0x1c0		; sram-J
 ffff2f58:	d0000001 	adrp	x1, 0xffff4000
 ffff2f5c:	91307021 	add	x1, x1, #0xc1c
 ffff2f60:	14000035 	b	0xffff3034
-ffff2f64:	b9406262 	ldr	w2, [x19, #0x60]
 
-; clear bit 0x10 in usb_flags
-ffff2f68:	52801de3 	mov	w3, #0xef                  	// #239
+ffff2f64:	b9406262 	ldr	w2, [x19, #0x60]	; w2 = pete
+
+ffff2f68:	52801de3 	mov	w3, #0xef
 ffff2f6c:	0a030000 	and	w0, w0, w3
-ffff2f70:	39019660 	strb	w0, [x19, #0x65]
+ffff2f70:	39019660 	strb	w0, [x19, #0x65]	; lucy &= ~0x10
 
 ffff2f74:	39400c20 	ldrb	w0, [x1, #3]
 ffff2f78:	39400823 	ldrb	w3, [x1, #2]
 ffff2f7c:	2a002074 	orr	w20, w3, w0, lsl #8
+
+;  call usb_xfer3 if ( pete == 7 )
 ffff2f80:	71001c5f 	cmp	w2, #0x7
-ffff2f84:	540006e1 	b.ne	0xffff3060  // b.any
+ffff2f84:	540006e1 	b.ne	0xffff3060
+
 ffff2f88:	aa1303e0 	mov	x0, x19
 ffff2f8c:	9400006e 	bl	0xffff3144		; usb_xfer3
+
 ffff2f90:	12003e80 	and	w0, w20, #0xffff
 ffff2f94:	35000a40 	cbnz	w0, 0xffff30dc		; return
-ffff2f98:	528000c0 	mov	w0, #0x6                   	// #6
-ffff2f9c:	b9006260 	str	w0, [x19, #0x60]
+ffff2f98:	528000c0 	mov	w0, #0x6
+ffff2f9c:	b9006260 	str	w0, [x19, #0x60]	; pete = 6
 ffff2fa0:	1400004f 	b	0xffff30dc		; return
+
 ffff2fa4:	7100145f 	cmp	w2, #0x5
-ffff2fa8:	54000241 	b.ne	0xffff2ff0  // b.any
-ffff2fac:	b9406260 	ldr	w0, [x19, #0x60]
+ffff2fa8:	54000241 	b.ne	0xffff2ff0
+ffff2fac:	b9406260 	ldr	w0, [x19, #0x60]	; pete
 ffff2fb0:	71001c1f 	cmp	w0, #0x7
-ffff2fb4:	54000720 	b.eq	0xffff3098  // b.none
+ffff2fb4:	54000720 	b.eq	0xffff3098		; is pete == 7
+
 ffff2fb8:	39400c20 	ldrb	w0, [x1, #3]
 ffff2fbc:	39400821 	ldrb	w1, [x1, #2]
 ffff2fc0:	f9402662 	ldr	x2, [x19, #0x48]
@@ -4442,10 +4519,10 @@ ffff2fcc:	12166021 	and	w1, w1, #0xfffffc07
 ffff2fd0:	2a000c21 	orr	w1, w1, w0, lsl #3
 ffff2fd4:	b9060041 	str	w1, [x2, #0x600]
 ffff2fd8:	7100001f 	cmp	w0, #0x0
-ffff2fdc:	528000c0 	mov	w0, #0x6                   	// #6
-ffff2fe0:	528000a1 	mov	w1, #0x5                   	// #5
-ffff2fe4:	1a800020 	csel	w0, w1, w0, eq  // eq = none
-ffff2fe8:	b9006260 	str	w0, [x19, #0x60]
+ffff2fdc:	528000c0 	mov	w0, #0x6
+ffff2fe0:	528000a1 	mov	w1, #0x5
+ffff2fe4:	1a800020 	csel	w0, w1, w0, eq
+ffff2fe8:	b9006260 	str	w0, [x19, #0x60]	; pete = 5 or 6
 ffff2fec:	1400003c 	b	0xffff30dc		; return
 
 ; still going ...  usb_one ()
@@ -4481,18 +4558,24 @@ ffff3044:	aa1403e1 	mov	x1, x20
 ffff3048:	aa1503e2 	mov	x2, x21		; count
 ffff304c:	94000084 	bl	0xffff325c	; usb_xfer4 ()
 
+; is x20 X/Y at this point ??
+; if so, this extracts "sue"
 ffff3050:	b9401a80 	ldr	w0, [x20, #24]
-ffff3054:	12007800 	and	w0, w0, #0x7fffffff
+ffff3054:	12007800 	and	w0, w0, #0x7fffffff	; clear top bit
 ffff3058:	b9001a80 	str	w0, [x20, #24]
 ffff305c:	14000020 	b	0xffff30dc		; return
+
 ffff3060:	7100185f 	cmp	w2, #0x6
-ffff3064:	540001a1 	b.ne	0xffff3098  // b.any
+ffff3064:	540001a1 	b.ne	0xffff3098		; is pete == 6
+
+; pete == 6
 ffff3068:	aa1303e0 	mov	x0, x19
 ffff306c:	94000036 	bl	0xffff3144		; usb_xfer3
 ffff3070:	12003e80 	and	w0, w20, #0xffff
 ffff3074:	34000340 	cbz	w0, 0xffff30dc		; return
-ffff3078:	528000e0 	mov	w0, #0x7                   	// #7
-ffff307c:	b9006260 	str	w0, [x19, #0x60]
+ffff3078:	528000e0 	mov	w0, #0x7
+ffff307c:	b9006260 	str	w0, [x19, #0x60]	; pete = 7
+
 ffff3080:	f9402660 	ldr	x0, [x19, #0x48]
 ffff3084:	b9460401 	ldr	w1, [x0, #0x604]	; USB dctrl
 ffff3088:	52814002 	mov	w2, #0xa00                 	// #2560
@@ -4513,10 +4596,10 @@ ffff30ac:	aa1403e0 	mov	x0, x20
 ffff30b0:	aa1f03e2 	mov	x2, xzr
 ffff30b4:	940000e5 	bl	0xffff3448		; usb_stall ( X/Y, 1, 0 )
 ffff30b8:	b9001a95 	str	w21, [x20, #24]
-ffff30bc:	b9005e75 	str	w21, [x19, #0x5c]	; set xfer_code
+ffff30bc:	b9005e75 	str	w21, [x19, #0x5c]	; xfer_code = 1
 
 ; a second argument of 0 locks this to X (EP0-OUT)
-; usb_transfer ( "usb", 0, J, 8, 0x20, 0 )
+; usb_start_transfer ( "usb", 0, J, 8, 0x20, 0 )
 
 ffff30c0:	f9400e62 	ldr	x2, [x19, #24]		; sram-J
 ffff30c4:	52800103 	mov	w3, #0x8
@@ -4524,7 +4607,7 @@ ffff30c8:	52800404 	mov	w4, #0x20
 ffff30cc:	aa1303e0 	mov	x0, x19
 ffff30d0:	aa1f03e1 	mov	x1, xzr
 ffff30d4:	aa1f03e5 	mov	x5, xzr
-ffff30d8:	97fffe45 	bl	0xffff29ec		; usb_transfer ()
+ffff30d8:	97fffe45 	bl	0xffff29ec		; usb_start_transfer ()
 
 ; Here is where we return
 ffff30dc:	f9400ff3 	ldr	x19, [sp, #24]
@@ -4540,7 +4623,7 @@ ffff30f0:	d65f03c0 	ret
 
 ; subroutine -- usb_xfer2 ( "usb", &event )
 
-; This is a "wrapper" to set up a call to usb_transfer()
+; This is a "wrapper" to set up a call to usb_start_transfer()
 
 ;  2 calls from above in usb_one
 ; -- no prolog
@@ -4567,14 +4650,14 @@ ffff3118:	f9401c01 	ldr	x1, [x0, #0x38]		; X/Y
 ; odd to pull "usb" from X/Y when we already have it in x0
 ffff311c:	f9400420 	ldr	x0, [x1, #8]		; "usb"
 
-ffff3120:	39419403 	ldrb	w3, [x0, #0x65]		; read usb_flags
+ffff3120:	39419403 	ldrb	w3, [x0, #0x65]		; w3 = lucy
 ffff3124:	f9400c02 	ldr	x2, [x0, #24]		; "usb"+24 = sram-J
 
 ; note that we curiously augment the 0x30 count with some flag bits
 
 ffff3128:	39408021 	ldrb	w1, [x1, #32]		; ep-index
 
-; w4 = 0x30 + (usb_flags&0x40) >> 2
+; w4 = 0x30 + (lucy&0x40) >> 2
 ffff312c:	121a0063 	and	w3, w3, #0x40
 ffff3130:	52800604 	mov	w4, #0x30
 ffff3134:	0b430884 	add	w4, w4, w3, lsr #2
@@ -4584,16 +4667,16 @@ ffff313c:	aa1f03e5 	mov	x5, xzr
 
 ; note that the endpoint for the following is taken from the event
 
-; usb_transfer ( "usb", ep-index, sram-J, 0, 0x30 + flags, 0 )
+; usb_start_transfer ( "usb", ep-index, sram-J, 0, 0x30 + flags, 0 )
 
-ffff3140:	17fffe2b 	b	0xffff29ec		; usb_transfer ()
+ffff3140:	17fffe2b 	b	0xffff29ec		; usb_start_transfer ()
 
 ; no return here, we just branch above
 ; end of usb_xfer2
 
 ; ===============================================================
 
-; subroutine -- usb_xfer3
+; subroutine -- usb_xfer3 ( "usb", ?? )
 ; 3 calls from usb_one
 
 ffff3144:	d100c3ff 	sub	sp, sp, #0x30		; prolog
@@ -4612,22 +4695,33 @@ ffff3170:	12000c00 	and	w0, w0, #0xf
 ffff3174:	7100301f 	cmp	w0, #0xc
 ffff3178:	54000221 	b.ne	0xffff31bc  // b.any
 
-; usb_flags
-ffff317c:	39419660 	ldrb	w0, [x19, #0x65]
-ffff3180:	53020802 	ubfx	w2, w0, #2, #1
+; Here we are using bit 0x4 in lucy
+;  to select X or Y
+ffff317c:	39419660 	ldrb	w0, [x19, #0x65]	; lucy
+ffff3180:	53020802 	ubfx	w2, w0, #2, #1		; get bit 0x4
 ffff3184:	8b224e62 	add	x2, x19, w2, uxtw #3
-ffff3188:	f9401c43 	ldr	x3, [x2, #0x38]
-ffff318c:	52800402 	mov	w2, #0x20                  	// #32
+ffff3188:	f9401c43 	ldr	x3, [x2, #0x38]		; X/Y
+
+; tst does a bitwise AND, discarding the result
+; so we are testing bit 0x20 in lucy
+; cset yields a 1 or 0 result.
+; but why not just use tbnz on bit 5 ??
+ffff318c:	52800402 	mov	w2, #0x20
 ffff3190:	6a02001f 	tst	w0, w2
-ffff3194:	1a9f07e2 	cset	w2, ne  // ne = any
+ffff3194:	1a9f07e2 	cset	w2, ne
 ffff3198:	37000442 	tbnz	w2, #0, 0xffff3220
-ffff319c:	b9006a7f 	str	wzr, [x19, #0x68]
+
+ffff319c:	b9006a7f 	str	wzr, [x19, #0x68]	; bob = 0
+
 ffff31a0:	39401422 	ldrb	w2, [x1, #5]
 ffff31a4:	39401024 	ldrb	w4, [x1, #4]
-ffff31a8:	2a022082 	orr	w2, w4, w2, lsl #8
-ffff31ac:	7111c85f 	cmp	w2, #0x472
-ffff31b0:	540002a1 	b.ne	0xffff3204  // b.any
-ffff31b4:	f9003a7f 	str	xzr, [x19, #0x70]
+ffff31a8:	2a022082 	orr	w2, w4, w2, lsl #8	; assemble 16 bit value
+
+ffff31ac:	7111c85f 	cmp	w2, #0x472		; 0x472 magic value
+ffff31b0:	540002a1 	b.ne	0xffff3204
+
+;  Here with 0x472
+ffff31b4:	f9003a7f 	str	xzr, [x19, #0x70]	; sam = 0
 ffff31b8:	14000018 	b	0xffff3218
 ffff31bc:	f9402260 	ldr	x0, [x19, #0x40]
 
@@ -4639,10 +4733,10 @@ ffff31d0:	aa1403e0 	mov	x0, x20
 ffff31d4:	aa1f03e2 	mov	x2, xzr
 ffff31d8:	9400009c 	bl	0xffff3448		; usb_stall ( X/Y, 1, 0 )
 ffff31dc:	b9001a95 	str	w21, [x20, #24]		; again (maybe it changed?)
-ffff31e0:	b9005e75 	str	w21, [x19, #0x5c]	; set xfer_code
+ffff31e0:	b9005e75 	str	w21, [x19, #0x5c]	; xfer_code = 1
 
 ; a second argument of 0 locks this to X (EP0-OUT)
-; usb_transfer ( "usb", 0, sram-J, 8, 0x20, 0 )
+; usb_start_transfer ( "usb", 0, sram-J, 8, 0x20, 0 )
 
 ffff31e4:	f9400e62 	ldr	x2, [x19, #24]		; sram-J
 ffff31e8:	52800103 	mov	w3, #0x8
@@ -4650,27 +4744,36 @@ ffff31ec:	52800404 	mov	w4, #0x20
 ffff31f0:	aa1303e0 	mov	x0, x19
 ffff31f4:	aa1f03e1 	mov	x1, xzr
 ffff31f8:	aa1f03e5 	mov	x5, xzr
-ffff31fc:	97fffdfc 	bl	0xffff29ec		; usb_transfer ()
+ffff31fc:	97fffdfc 	bl	0xffff29ec		; usb_start_transfer ()
+ffff3200:	14000012 	b	0xffff3248		; return
 
-ffff3200:	14000012 	b	0xffff3248
-ffff3204:	7111c45f 	cmp	w2, #0x471
-ffff3208:	540000c1 	b.ne	0xffff3220  // b.any
-ffff320c:	f0ffc662 	adrp	x2, 0xff8c2000
-ffff3210:	91000042 	add	x2, x2, #0x0
-ffff3214:	f9003a62 	str	x2, [x19, #0x70]
+ffff3204:	7111c45f 	cmp	w2, #0x471		; 0x471 magic value
+ffff3208:	540000c1 	b.ne	0xffff3220
+
+;  Here with 0x471
+ffff320c:	f0ffc662 	adrp	x2, 0xff8c2000		; SRAM
+ffff3210:	91000042 	add	x2, x2, #0x0		; silly
+ffff3214:	f9003a62 	str	x2, [x19, #0x70]	; sam = SRAM
+
 ffff3218:	321b0000 	orr	w0, w0, #0x20
-ffff321c:	39019660 	strb	w0, [x19, #0x65]	; usb_flags
+ffff321c:	39019660 	strb	w0, [x19, #0x65]	; lucy = w0 | 0x20
+
 ffff3220:	36280140 	tbz	w0, #5, 0xffff3248
+
+; Here is where "joe" is generated (a 16 bit value)
 ffff3224:	39401c20 	ldrb	w0, [x1, #7]
 ffff3228:	39401821 	ldrb	w1, [x1, #6]
 ffff322c:	2a002022 	orr	w2, w1, w0, lsl #8
-ffff3230:	7900da62 	strh	w2, [x19, #0x6c]
+ffff3230:	7900da62 	strh	w2, [x19, #0x6c]	; "joe"
 
 ffff3234:	52800040 	mov	w0, #0x2
 ffff3238:	b9005e60 	str	w0, [x19, #0x5c]	; xfer_code = 2
 ffff323c:	aa1303e0 	mov	x0, x19
+
 ffff3240:	aa0303e1 	mov	x1, x3
 ffff3244:	94000006 	bl	0xffff325c		; usb_xfer4 ()
+
+; done
 ffff3248:	f94007f3 	ldr	x19, [sp, #8]
 ffff324c:	a94157f4 	ldp	x20, x21, [sp, #16]
 ffff3250:	a9427bfd 	ldp	x29, x30, [sp, #32]
@@ -4692,100 +4795,111 @@ ffff3268:	a9025ff6 	stp	x22, x23, [sp, #32]
 ffff326c:	a90157f4 	stp	x20, x21, [sp, #16]
 ffff3270:	f90007f3 	str	x19, [sp, #8]
 
-; loop
 ffff3274:	aa0103f5 	mov	x21, x1			; x
 ffff3278:	aa0003f3 	mov	x19, x0			; "usb"
-ffff327c:	12003c54 	and	w20, w2, #0xffff
+ffff327c:	12003c54 	and	w20, w2, #0xffff	; w20 = n & 0xfff
 ffff3280:	340001d4 	cbz	w20, 0xffff32b8
 
 ffff3284:	f9400aa0 	ldr	x0, [x21, #16]		; x + 16
 ffff3288:	39401401 	ldrb	w1, [x0, #5]
 ffff328c:	39401000 	ldrb	w0, [x0, #4]
-ffff3290:	2a012017 	orr	w23, w0, w1, lsl #8
+ffff3290:	2a012017 	orr	w23, w0, w1, lsl #8	; 16 bit value
+
 ffff3294:	394082a1 	ldrb	w1, [x21, #32]		; x + 32
 ffff3298:	529fffe0 	mov	w0, #0xffff
 ffff329c:	0b2042e0 	add	w0, w23, w0, uxtw
 ffff32a0:	0a140000 	and	w0, w0, w20
-ffff32a4:	34000160 	cbz	w0, 0xffff32d0		; break
+ffff32a4:	34000160 	cbz	w0, 0xffff32d0
+
 ffff32a8:	12001c20 	and	w0, w1, #0xff
 ffff32ac:	340001e0 	cbz	w0, 0xffff32e8
 ffff32b0:	394082a1 	ldrb	w1, [x21, #32]
-ffff32b4:	14000009 	b	0xffff32d8		; break
+ffff32b4:	14000009 	b	0xffff32d8
 
-ffff32b8:	f9400e62 	ldr	x2, [x19, #24]		; "usb" + 24
+; aligned on 4096 boundary (or 0)
+ffff32b8:	f9400e62 	ldr	x2, [x19, #24]		; "buf" = "usb" + 24
 ffff32bc:	394082a1 	ldrb	w1, [x21, #32]		; x + 32
 ffff32c0:	52800a04 	mov	w4, #0x50		; 80
 ffff32c4:	aa1303e0 	mov	x0, x19
 ffff32c8:	aa1f03e3 	mov	x3, xzr
-ffff32cc:	1400002a 	b	0xffff3374	; loop back
+ffff32cc:	1400002a 	b	0xffff3374		; short cut to finish
 
+; from above
 ffff32d0:	12001c20 	and	w0, w1, #0xff
 ffff32d4:	34000260 	cbz	w0, 0xffff3320
 
+; from above
 ffff32d8:	f9400e62 	ldr	x2, [x19, #24]
-ffff32dc:	52800a04 	mov	w4, #0x50                  	// #80
+ffff32dc:	52800a04 	mov	w4, #0x50
 ffff32e0:	aa1303e0 	mov	x0, x19
 ffff32e4:	14000015 	b	0xffff3338
 
+; from above
 ffff32e8:	7101069f 	cmp	w20, #0x41
-ffff32ec:	540002a3 	b.cc	0xffff3340  // b.lo, b.ul, b.last
-ffff32f0:	f9403a60 	ldr	x0, [x19, #0x70]
-ffff32f4:	b9406a61 	ldr	w1, [x19, #0x68]
+ffff32ec:	540002a3 	b.cc	0xffff3340
+
+; bob is a count, sam is an address (0 or SRAM+0)
+ffff32f0:	f9403a60 	ldr	x0, [x19, #0x70]	; x0 = sam
+
+ffff32f4:	b9406a61 	ldr	w1, [x19, #0x68]	; w1 = bob
+
 ffff32f8:	1ad70a82 	udiv	w2, w20, w23
 ffff32fc:	1b177c56 	mul	w22, w2, w23
 
 ; A note on the following call.
-; This is the only call to usb_transfer with the final argument of 1
-; This tells usb_transfer to construct the information
+; This is the only call to usb_start_transfer with the final argument of 1
+; This tells usb_start_transfer to construct the information
 ; in the "sram-K" block, then return without doing anything with it
 
 ; a second argument of 0 locks this to X (EP0-OUT)
 
-; usb_transfer ( "usb", 0, buf, x22, 0x50, 1 )
+; usb_start_transfer ( "usb", 0, buf, x22, 0x50, 1 )
 
-ffff3300:	8b000022 	add	x2, x1, x0	; buf
+ffff3300:	8b000022 	add	x2, x1, x0		; buf = sam + bob
 ffff3304:	52800a04 	mov	w4, #0x50
 ffff3308:	52800025 	mov	w5, #0x1
 ffff330c:	aa1303e0 	mov	x0, x19
 ffff3310:	aa1f03e1 	mov	x1, xzr
 ffff3314:	aa1603e3 	mov	x3, x22
-ffff3318:	97fffdb5 	bl	0xffff29ec		; usb_transfer ()
+ffff3318:	97fffdb5 	bl	0xffff29ec		; usb_start_transfer ()
 
 ffff331c:	1400000a 	b	0xffff3344
 
-ffff3320:	f9403a60 	ldr	x0, [x19, #0x70]
-ffff3324:	b9406a61 	ldr	w1, [x19, #0x68]
-ffff3328:	8b000022 	add	x2, x1, x0
-ffff332c:	52800a04 	mov	w4, #0x50                  	// #80
+ffff3320:	f9403a60 	ldr	x0, [x19, #0x70]	; sam
+ffff3324:	b9406a61 	ldr	w1, [x19, #0x68]	; bob
+ffff3328:	8b000022 	add	x2, x1, x0		; "buf" = sam + bob
+
+ffff332c:	52800a04 	mov	w4, #0x50
 ffff3330:	aa1303e0 	mov	x0, x19
 ffff3334:	aa1f03e1 	mov	x1, xzr
 ffff3338:	aa1403e3 	mov	x3, x20
-ffff333c:	1400000e 	b	0xffff3374		; loop back
+ffff333c:	1400000e 	b	0xffff3374		; short cut to finish
 
 ffff3340:	2a1f03f6 	mov	w22, wzr
 
-; usb_flags
-ffff3344:	39419660 	ldrb	w0, [x19, #0x65]
+ffff3344:	39419660 	ldrb	w0, [x19, #0x65]	; lucy
 ffff3348:	4b364281 	sub	w1, w20, w22, uxtw
 ffff334c:	0b2142e3 	add	w3, w23, w1, uxtw
 ffff3350:	321f0000 	orr	w0, w0, #0x2
-ffff3354:	39019660 	strb	w0, [x19, #0x65]
+ffff3354:	39019660 	strb	w0, [x19, #0x65]	; lucy |= 0x2
 
 ; We get here with w21 = X/Y
 ; the argument I denote by "x" gets calculated
 ;  no telling yet what the game is with that
 
-; usb_transfer ( "usb", endpoint-index, sram-L, x, 0x50, 0 )
+; usb_start_transfer ( "usb", endpoint-index, "buf", x, 0x50, 0 )
 
-ffff3358:	f9401662 	ldr	x2, [x19, #0x28]	; sram-L
+ffff3358:	f9401662 	ldr	x2, [x19, #0x28]	; "buf" = sram-L
 ffff335c:	394082a1 	ldrb	w1, [x21, #32]		; ep-index
 ffff3360:	51000460 	sub	w0, w3, #0x1
 ffff3364:	1ad70800 	udiv	w0, w0, w23
 ffff3368:	1b177c03 	mul	w3, w0, w23
 ffff336c:	52800a04 	mov	w4, #0x50
 ffff3370:	aa1303e0 	mov	x0, x19
+
+; 3 ways to get here
 ffff3374:	aa1f03e5 	mov	x5, xzr
-ffff3378:	97fffd9d 	bl	0xffff29ec		; usb_transfer ()
+ffff3378:	97fffd9d 	bl	0xffff29ec		; usb_start_transfer ()
 
 ; done
 ffff337c:	f94007f3 	ldr	x19, [sp, #8]
@@ -5096,9 +5210,10 @@ ffff35b4:	b9460000 	ldr	w0, [x0, #0x600]	; c700 = device config register
 ; anyway, if we see the 3, we clear the bottom 3 bits
 ; these indicate device speed, and 0 is "high speed"
 
-ffff35b8:	b9405661 	ldr	w1, [x19, #0x54]	; gets 3 (high speed)
+; This is set to 3 at initialization, never changed.
+; This indicates "high speed" initially
+ffff35b8:	b9405661 	ldr	w1, [x19, #0x54]	; fetch 3
 ffff35bc:	121d7000 	and	w0, w0, #0xfffffff8
-
 ffff35c0:	71000c3f 	cmp	w1, #0x3		; did we get 3 ?
 ffff35c4:	54000140 	b.eq	0xffff35ec		; yes !
 
@@ -5128,10 +5243,10 @@ ffff35f0:	b9060020 	str	w0, [x1, #0x600]	; write to device config reg
 ; -----------------
 
 ; clear bit 0x10 in usb.flags
-ffff35f4:	39419660 	ldrb	w0, [x19, #0x65]
+ffff35f4:	39419660 	ldrb	w0, [x19, #0x65]	; lucy
 ffff35f8:	52801de1 	mov	w1, #0xef
 ffff35fc:	0a010000 	and	w0, w0, w1
-ffff3600:	39019660 	strb	w0, [x19, #0x65]
+ffff3600:	39019660 	strb	w0, [x19, #0x65]	; lucy &= ~0x10
 
 ; X
 ffff3604:	f9401e60 	ldr	x0, [x19, #0x38]	; X
@@ -5148,12 +5263,12 @@ ffff3620:	35000120 	cbnz	w0, 0xffff3644
 ffff3624:	52800020 	mov	w0, #0x1
 ffff3628:	b9005e60 	str	w0, [x19, #0x5c]	; xfer_code = 1
 
-; usb_transfer_x is a wrapper
-; that sets up a call to usb_transfer for ep-index 0 (X or EP0-OUT)
+; usb_start_transfer_x is a wrapper
+; that sets up a call to usb_start_transfer for ep-index 0 (X or EP0-OUT)
 ; that involves sram-J
 
 ffff362c:	aa1303e0 	mov	x0, x19
-ffff3630:	97fffce9 	bl	0xffff29d4		; usb_transfer_x ( "usb" )
+ffff3630:	97fffce9 	bl	0xffff29d4		; usb_start_transfer_x ( "usb" )
 
 ; Here we write 0x1e1f to the usb device event enable register
 ; this is (more or less) a 12 bit mask of events that can be enabled
@@ -5237,7 +5352,7 @@ ffff3668:	a90253f3 	stp	x19, x20, [sp, #32]
 ; we call first during early initialization with the flag = 0
 ; we call later when handling "connect done" with the flag = 1
 
-ffff366c:	aa0003f3 	mov	x19, x0			; x or y
+ffff366c:	aa0003f3 	mov	x19, x0			; X or Y
 ffff3670:	f9400674 	ldr	x20, [x19, #8]		; "usb"
 ffff3674:	39406260 	ldrb	w0, [x19, #24]
 
@@ -5268,9 +5383,9 @@ ffff36ac:	54000143 	b.cc	0xffff36d4		; < 2 so endpoint 0
 ; endpoint 2 or higher
 ;  -- never happens for us
 
-ffff36b0:	39419680 	ldrb	w0, [x20, #0x65]	; usb_flags
+ffff36b0:	39419680 	ldrb	w0, [x20, #0x65]	; lucy
 ffff36b4:	52800201 	mov	w1, #0x10
-ffff36b8:	6a01001f 	tst	w0, w1
+ffff36b8:	6a01001f 	tst	w0, w1			; test 0x10 in lucy
 ffff36bc:	1a9f07e1 	cset	w1, ne
 ffff36c0:	37000141 	tbnz	w1, #0, 0xffff36e8
 
@@ -5282,7 +5397,7 @@ ffff36c0:	37000141 	tbnz	w1, #0, 0xffff36e8
 ffff36c4:	d0000001 	adrp	x1, 0xffff5000
 ffff36c8:	b9413422 	ldr	w2, [x1, #0x134]	; ffff5134: 00020009
 ffff36cc:	321c0000 	orr	w0, w0, #0x10
-ffff36d0:	39019680 	strb	w0, [x20, #0x65]	; usb_flags
+ffff36d0:	39019680 	strb	w0, [x20, #0x65]	; lucy = w0 | 0x10
 
 ; endpoint 0 (EP0-OUT) comes right here
 ; in our case cmd = w2 = 9
@@ -5475,6 +5590,20 @@ ffff385c:	94000308 	bl	0xffff447c		; memset ( addr, 0, 0x40 );
 ; block X is for EP0-OUT   at SRAM + 0x318
 ; block Y is for EP0-IN    at SRAM + 0x340
 
+; X/Y + 0 -- "wally"
+; X/Y + 4
+; X/Y + 8 -- "usb" (8 bytes	
+; X/Y + 12 -  ...
+; X/Y + 16 -- ?
+; X/Y + 20 -- some flags
+; X/Y + 24 -- 0 "sue"
+; X/Y + 28 -- "usb" (8 bytes	
+; X/Y + 32 -- 4 bytes
+
+; note that "sue" is sometimes referenced as 32 bits and other times as just a byte
+; it holds the TIP (transfer in progress) bit
+; and also some other bits, not yet understood
+
 ; setup block X (pointer at usb + 0x38)
 ;  40 bytes in size i.e. 0x28
 ; 
@@ -5489,7 +5618,7 @@ ffff3874:	94000302 	bl	0xffff447c		; memset ( x20, 0, 0x28 )
 ffff3878:	f9000693 	str	x19, [x20, #8]		; "usb"
 ffff387c:	3900829f 	strb	wzr, [x20, #32]		; 0 (endpoint index, EP0-OUT)
 ffff3880:	39008e9f 	strb	wzr, [x20, #0x23]	; 0
-ffff3884:	b9001a9f 	str	wzr, [x20, #24]
+ffff3884:	b9001a9f 	str	wzr, [x20, #24]		; "sue"
 ffff3888:	f9001e74 	str	x20, [x19, #0x38]	; pointer to X
 
 ; setup block Y (pointer at usb + 0x40)
@@ -5676,8 +5805,8 @@ ffff3994:	53011400 	ubfx	w0, w0, #1, #5
 ffff3998:	8b204e61 	add	x1, x19, w0, uxtw #3
 ffff399c:	f9401c21 	ldr	x1, [x1, #0x38]		; X or Y
 
-ffff39a0:	b9401821 	ldr	w1, [x1, #24]		; X/Y + 24
-
+; Test bit 0 (0x01) in sue
+ffff39a0:	b9401821 	ldr	w1, [x1, #24]		; X/Y + 24 "sue"
 ffff39a4:	36000ac1 	tbz	w1, #0, 0xffff3afc	; next event ..
 
 ; test endpoint index
@@ -5685,8 +5814,9 @@ ffff39a8:	7100041f 	cmp	w0, #0x1
 ffff39ac:	54000a88 	b.hi	0xffff3afc		; next event ..
 
 ;  ********************************************
+;  ********************************************  call usb_one ()
 ;  ********************************************
-;  ********************************************
+
 ; The 32 bit event is on the stack and we pass a pointer to it.
 ; The code in usb_one then carefully moves it byte by byte into
 ; a register, which seems sort of silly if we can just put it onto
@@ -5724,12 +5854,14 @@ ffff39e0:	b9460401 	ldr	w1, [x0, #0x604]	; USB dctrl
 ffff39e4:	121b6c21 	and	w1, w1, #0xffffffe1
 ffff39e8:	b9060401 	str	w1, [x0, #0x604]	; USB dctrl
 
-ffff39ec:	f9402260 	ldr	x0, [x19, #0x40]
+ffff39ec:	f9402260 	ldr	x0, [x19, #0x40]	; Y
 ffff39f0:	b4000180 	cbz	x0, 0xffff3a20
-ffff39f4:	b9401801 	ldr	w1, [x0, #24]
+
+ffff39f4:	b9401801 	ldr	w1, [x0, #24]		; "sue"
 ffff39f8:	36080141 	tbz	w1, #1, 0xffff3a20
 ffff39fc:	121e7821 	and	w1, w1, #0xfffffffd
-ffff3a00:	b9001801 	str	w1, [x0, #24]
+ffff3a00:	b9001801 	str	w1, [x0, #24]		; "sue"
+
 ffff3a04:	910043e3 	add	x3, sp, #0x10
 ffff3a08:	b900087f 	str	wzr, [x3, #8]
 ffff3a0c:	f9000bff 	str	xzr, [sp, #16]
@@ -5738,9 +5870,11 @@ ffff3a14:	528000a2 	mov	w2, #0x5		; cmd = 5 (clear stall)
 ffff3a18:	aa1303e0 	mov	x0, x19			; "usb"
 ffff3a1c:	97fffe5e 	bl	0xffff3394		; usb_endpoint_command ( "usb", ep_index, 5, params )
 
-ffff3a20:	39419660 	ldrb	w0, [x19, #0x65]	; usb_flags
+; w28 is 0xcd = 1100_1101
+; so we clear 0x20, 0x10,and 2
+ffff3a20:	39419660 	ldrb	w0, [x19, #0x65]	; lucy
 ffff3a24:	0a1c0000 	and	w0, w0, w28
-ffff3a28:	39019660 	strb	w0, [x19, #0x65]
+ffff3a28:	39019660 	strb	w0, [x19, #0x65]	; lucy &= w28
 
 ffff3a2c:	b900627a 	str	w26, [x19, #0x60]
 
@@ -5763,7 +5897,9 @@ ffff3a40:	1400002f 	b	0xffff3afc		; next event ..
 ffff3a44:	f9402660 	ldr	x0, [x19, #0x48]
 ffff3a48:	b9460c00 	ldr	w0, [x0, #0x60c]
 ffff3a4c:	12000801 	and	w1, w0, #0x7
-ffff3a50:	39019261 	strb	w1, [x19, #0x64]
+
+; all well and good, but we never touch kate anywhere else
+ffff3a50:	39019261 	strb	w1, [x19, #0x64]	; kate
 
 ; Here is a cute use of a branch table.
 ; The branch is all about what speed we got from the
@@ -5824,10 +5960,10 @@ ffff3a94:	f9402660 	ldr	x0, [x19, #0x48]	; usb hw base
 ffff3a98:	0a1b0021 	and	w1, w1, w27
 ffff3a9c:	b9060401 	str	w1, [x0, #0x604]	; USB dctrl
 
-; clear the last bit in usb_flags
-ffff3aa0:	39419660 	ldrb	w0, [x19, #0x65]
+ffff3aa0:	39419660 	ldrb	w0, [x19, #0x65]	; lucy
 ffff3aa4:	0a190000 	and	w0, w0, w25		; w25 is 0xe7
-ffff3aa8:	39019660 	strb	w0, [x19, #0x65]
+ffff3aa8:	39019660 	strb	w0, [x19, #0x65]	; clear 0x01
+
 ffff3aac:	14000014 	b	0xffff3afc		; next event ..
 
 ; Here for speed "2", whatever that is.
@@ -5975,9 +6111,12 @@ ffff3bc8:	d65f03c0 	ret
 ; END of verify ()
 
 ; ============================================
-; subroutine - usb_try_run ()
+
+; subroutine - usb_try_run ( J, sam, bob )
+
 ;  - 1 call from usb_one()
-; this will run loaded code eventually
+
+; this will (if possible) run loaded code eventually
 
 ffff3bcc:	d100c3ff 	sub	sp, sp, #0x30
 ffff3bd0:	a9027bfd 	stp	x29, x30, [sp, #32]
@@ -5985,9 +6124,9 @@ ffff3bd4:	910083fd 	add	x29, sp, #0x20
 ffff3bd8:	a90157f4 	stp	x20, x21, [sp, #16]
 ffff3bdc:	f90007f3 	str	x19, [sp, #8]
 
-ffff3be0:	aa0103f3 	mov	x19, x1			; buf
-ffff3be4:	aa0003f5 	mov	x21, x0
-ffff3be8:	12002c40 	and	w0, w2, #0xfff
+ffff3be0:	aa0103f3 	mov	x19, x1			; buf = sam
+ffff3be4:	aa0003f5 	mov	x21, x0			; J
+ffff3be8:	12002c40 	and	w0, w2, #0xfff		; w0 = bob & 0xfff
 ffff3bec:	7100041f 	cmp	w0, #0x1
 ffff3bf0:	1a9f17e0 	cset	w0, eq
 ffff3bf4:	12000000 	and	w0, w0, #0x1
@@ -6005,7 +6144,8 @@ ffff3c14:	b9001001 	str	w1, [x0, #16]		; SRAM + 16 = 0xa
 
 ffff3c18:	51000a94 	sub	w20, w20, #0x2
 ffff3c1c:	12003ea0 	and	w0, w21, #0xffff
-ffff3c20:	7111c41f 	cmp	w0, #0x471
+
+ffff3c20:	7111c41f 	cmp	w0, #0x471		; 0x471 magic value
 ffff3c24:	540002c1 	b.ne	0xffff3c7c
 ffff3c28:	b0ffc660 	adrp	x0, 0xff8c0000
 ffff3c2c:	b9400c02 	ldr	w2, [x0, #12]
@@ -6023,18 +6163,19 @@ ffff3c54:	350006e0 	cbnz	w0, 0xffff3d30		; return if nz
 
 ffff3c58:	b0ffc660 	adrp	x0, 0xff8c0000
 ffff3c5c:	52800021 	mov	w1, #0x1
-ffff3c60:	b9003001 	str	w1, [x0, #0x30]
+ffff3c60:	b9003001 	str	w1, [x0, #0x30]		; SRAM + 0x30 = 1
+
 ffff3c64:	910c8261 	add	x1, x19, #0x320
 ffff3c68:	b0ffc660 	adrp	x0, 0xff8c0000
-ffff3c6c:	9100d000 	add	x0, x0, #0x34
-ffff3c70:	d2800882 	mov	x2, #0x44                  	// #68
-ffff3c74:	940001f7 	bl	0xffff4450	; memcpy ( SRAM + 0x34, x19 + 0x320, 0x44 )
-ffff3c78:	1400002e 	b	0xffff3d30	; return
+ffff3c6c:	9100d000 	add	x0, x0, #0x34		; SRAM + 0x34
+ffff3c70:	d2800882 	mov	x2, #0x44
+ffff3c74:	940001f7 	bl	0xffff4450		; memcpy ( SRAM + 0x34, x19 + 0x320, 0x44 )
+ffff3c78:	1400002e 	b	0xffff3d30		; return
 
-ffff3c7c:	7111c81f 	cmp	w0, #0x472
-ffff3c80:	54000581 	b.ne	0xffff3d30	; return unless 0
+ffff3c7c:	7111c81f 	cmp	w0, #0x472		; 0x472 magic value
+ffff3c80:	54000581 	b.ne	0xffff3d30		; return unless 0
 ffff3c84:	b0ffc660 	adrp	x0, 0xff8c0000
-ffff3c88:	b9400c00 	ldr	w0, [x0, #12]	; SRAM + 12
+ffff3c88:	b9400c00 	ldr	w0, [x0, #12]		; SRAM + 12
 ffff3c8c:	340001c0 	cbz	w0, 0xffff3cc4
 
 ffff3c90:	b0ffc675 	adrp	x21, 0xff8c0000
@@ -6049,7 +6190,7 @@ ffff3ca8:	aa1403e1 	mov	x1, x20
 ffff3cac:	97fff21e 	bl	0xffff0524		; crypto2 ( x19, x20 )
 
 ffff3cb0:	b0ffc660 	adrp	x0, 0xff8c0000
-ffff3cb4:	9100d000 	add	x0, x0, #0x34
+ffff3cb4:	9100d000 	add	x0, x0, #0x34		; SRAM + 0x34
 ffff3cb8:	91009000 	add	x0, x0, #0x24
 ffff3cbc:	97fff23f 	bl	0xffff05b8		; crypto4 ( SRAM + 0x34 + 0x24 )
 ffff3cc0:	35000240 	cbnz	w0, 0xffff3d08
@@ -6079,7 +6220,7 @@ ffff3cfc:	9100d000 	add	x0, x0, #0x34
 ffff3d00:	97fff22e 	bl	0xffff05b8		; crypto4 ( SRAM + 0x34 )
 ffff3d04:	34000060 	cbz	w0, 0xffff3d10
 
-ffff3d08:	b90032bf 	str	wzr, [x21, #0x30]
+ffff3d08:	b90032bf 	str	wzr, [x21, #0x30]	; SRAM + 0x30 = 0
 ffff3d0c:	14000009 	b	0xffff3d30		; return
 
 ; The following fetches from this:
@@ -6100,7 +6241,8 @@ ffff3d1c:	b9400021 	ldr	w1, [x1]	; RK33
 ffff3d20:	91001262 	add	x2, x19, #0x4
 ffff3d24:	6b21401f 	cmp	w0, w1, uxtw
 ffff3d28:	9a930040 	csel	x0, x2, x19, eq  // eq = none
-ffff3d2c:	d63f0000 	blr	x0
+
+ffff3d2c:	d63f0000 	blr	x0		; GO !!
 
 ; done (but we won't fall through to here)
 ffff3d30:	f94007f3 	ldr	x19, [sp, #8]
@@ -6123,7 +6265,7 @@ ffff3d48:	a9007bfd 	stp	x29, x30, [sp]
 ffff3d4c:	910003fd 	mov	x29, sp
 
 ffff3d50:	b0ffc660 	adrp	x0, 0xff8c0000
-ffff3d54:	b900301f 	str	wzr, [x0, #0x30]	; SRAM + 0x30
+ffff3d54:	b900301f 	str	wzr, [x0, #0x30]	; SRAM + 0x30 = 0
 
 ffff3d58:	97fff389 	bl	0xffff0b7c		; CRU, cpu clocks
 
@@ -6477,7 +6619,7 @@ ffff4030:	910103ff 	add	sp, sp, #0x40
 ffff4034:	d65f03c0 	ret
 
 ; subroutine - called from one place
-; more Efuse1 manipulation
+; more Efuse-1 manipulation
 ffff4038:	d10103ff 	sub	sp, sp, #0x40
 ffff403c:	a9037bfd 	stp	x29, x30, [sp, #48]
 ffff4040:	9100c3fd 	add	x29, sp, #0x30
@@ -6632,6 +6774,7 @@ ffff4290:	aa1f03e0 	mov	x0, xzr
 ffff4294:	a9407bfd 	ldp	x29, x30, [sp]
 ffff4298:	910043ff 	add	sp, sp, #0x10
 ffff429c:	d65f03c0 	ret
+
 ffff42a0:	d100c3ff 	sub	sp, sp, #0x30
 ffff42a4:	a9027bfd 	stp	x29, x30, [sp, #32]
 ffff42a8:	910083fd 	add	x29, sp, #0x20
