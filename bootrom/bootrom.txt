@@ -4395,16 +4395,18 @@ ffff2dd4:	140000bb 	b	0xffff30c0		; TRANS_RETURN
 ;	C -- Xfer complete, xfer_code 1
 
 ; the check here is a belt and suspenders assertion check
-;  (should never happen)
+;  (should never happen) that xfer_code is 1
 
 ffff2dd8:	7100043f 	cmp	w1, #0x1
 ffff2ddc:	54001801 	b.ne	0xffff30dc		; return
 
-ffff2de0:	f9400261 	ldr	x1, [x19]
+; *** apparently we have received a packet in sram-J
+
+ffff2de0:	f9400261 	ldr	x1, [x19]		; sram-J
 ffff2de4:	39401c23 	ldrb	w3, [x1, #7]
 ffff2de8:	39401824 	ldrb	w4, [x1, #6]
 ffff2dec:	2a032083 	orr	w3, w4, w3, lsl #8
-ffff2df0:	340007a3 	cbz	w3, 0xffff2ee4
+ffff2df0:	340007a3 	cbz	w3, 0xffff2ee4		; below
 
 ; w2 still holds lucy from way above
 ffff2df4:	321a0040 	orr	w0, w2, #0x40
@@ -4430,7 +4432,7 @@ ffff2e0c:	39019660 	strb	w0, [x19, #0x65]	; lucy = w0 & ~0x8
 ffff2e10:	52800042 	mov	w2, #0x2
 ffff2e14:	14000038 	b	0xffff2ef4
 
-; END of Xfer complete, xfer_code 1
+; END of Xfer complete, xfer_code 1 (but there is more below)
 
 ; --------------------------- ----------------------------------
 ; --------------------------- ----------------------------------
@@ -4512,11 +4514,21 @@ ffff2ec0:	340010e0 	cbz	w0, 0xffff30dc		; return
 ffff2ec4:	52800020 	mov	w0, #0x1
 ffff2ec8:	b9005a60 	str	w0, [x19, #0x58]	; jane = 1
 ffff2ecc:	f9400e62 	ldr	x2, [x19, #24]		; sram-J
+
+; parameters for the call to usb_start_transfer ()
 ffff2ed0:	52800a04 	mov	w4, #0x50
 ffff2ed4:	aa1303e0 	mov	x0, x19
 ffff2ed8:	aa1403e1 	mov	x1, x20
 ffff2edc:	aa1f03e3 	mov	x3, xzr
-ffff2ee0:	1400007d 	b	0xffff30d4
+ffff2ee0:	1400007d 	b	0xffff30d4	; short cut into TRANS_RETURN
+
+; ------------------------------------------------------------------
+
+; here is a continuation of C, which is:
+;	C -- Xfer complete, xfer_code 1
+
+; We have a received packet in sram-J
+; and x1 points to sram-J
 
 ; clear bits 0x40, 0x8, and 0x4 in lucy
 ffff2ee4:	52801662 	mov	w2, #0xb3		; w2 = 0xb3
@@ -4526,24 +4538,37 @@ ffff2eec:	39019660 	strb	w0, [x19, #0x65]	; lucy &= 0xb3
 ffff2ef0:	52800062 	mov	w2, #0x3
 ffff2ef4:	b9005a62 	str	w2, [x19, #0x58]	; jane = 3
 
-ffff2ef8:	39400022 	ldrb	w2, [x1]
+; the first byte in a SETUP packet is "type"
+
+ffff2ef8:	39400022 	ldrb	w2, [x1]		; J+0
 ffff2efc:	121b0442 	and	w2, w2, #0x60
 ffff2f00:	35000782 	cbnz	w2, 0xffff2ff0
-ffff2f04:	39400422 	ldrb	w2, [x1, #1]
 
+; byte 2 is "request"
+
+ffff2f04:	39400422 	ldrb	w2, [x1, #1]		; J+1
+
+; request == 9 is "set configuration"
 ffff2f08:	7100245f 	cmp	w2, #0x9
 ffff2f0c:	540002c0 	b.eq	0xffff2f64
 
+; request == 6 is "get descriptor"
 ffff2f10:	7100185f 	cmp	w2, #0x6
 ffff2f14:	54000481 	b.ne	0xffff2fa4
 
-ffff2f18:	39400c22 	ldrb	w2, [x1, #3]
+; get the H byte of the 2 byte "value" field
+; this will give the type of the "get descriptor"
+
+ffff2f18:	39400c22 	ldrb	w2, [x1, #3]		; J+3
+
 ffff2f1c:	53020803 	ubfx	w3, w0, #2, #1
 ffff2f20:	8b234e63 	add	x3, x19, w3, uxtw #3
 ffff2f24:	f9401c74 	ldr	x20, [x3, #0x38]
 
-; if this matches, we go down to where we respond
-; with the vendor/product code.
+; if this is "get descriptor" of type "configuration"
+; that is what we expect and we branch to handle it.
+;  handling it is where we respond with the vendor/product code.
+
 ffff2f28:	7100085f 	cmp	w2, #0x2
 ffff2f2c:	54000681 	b.ne	0xffff2ffc
 
@@ -4551,7 +4576,8 @@ ffff2f30:	36300d60 	tbz	w0, #6, 0xffff30dc		; return
 
 ffff2f34:	39401c20 	ldrb	w0, [x1, #7]
 ffff2f38:	39401821 	ldrb	w1, [x1, #6]
-ffff2f3c:	2a002020 	orr	w0, w1, w0, lsl #8
+ffff2f3c:	2a002020 	orr	w0, w1, w0, lsl #8	; 16 bit length field
+
 ffff2f40:	7100281f 	cmp	w0, #0xa
 ffff2f44:	52800401 	mov	w1, #0x20
 ffff2f48:	1a813015 	csel	w21, w0, w1, cc
@@ -4562,6 +4588,8 @@ ffff2f54:	91070000 	add	x0, x0, #0x1c0		; sram-J
 ffff2f58:	d0000001 	adrp	x1, 0xffff4000
 ffff2f5c:	91307021 	add	x1, x1, #0xc1c
 ffff2f60:	14000035 	b	0xffff3034
+
+; We got a SETUP packet with "set configuration"
 
 ffff2f64:	b9406262 	ldr	w2, [x19, #0x60]	; w2 = pete
 
@@ -4586,32 +4614,54 @@ ffff2f98:	528000c0 	mov	w0, #0x6
 ffff2f9c:	b9006260 	str	w0, [x19, #0x60]	; pete = 6
 ffff2fa0:	1400004f 	b	0xffff30dc		; return
 
+; We got a setup packet of a type we aren't sure about.
+
 ffff2fa4:	7100145f 	cmp	w2, #0x5
-ffff2fa8:	54000241 	b.ne	0xffff2ff0
+ffff2fa8:	54000241 	b.ne	0xffff2ff0		; we don't like it
+
+; ---------------------------------------------------
+
+; we got a setup packet with SET ADDRESS
+
+; 5 is request type "set address"
+
 ffff2fac:	b9406260 	ldr	w0, [x19, #0x60]	; pete
 ffff2fb0:	71001c1f 	cmp	w0, #0x7		; is pete == 7 ?
 ffff2fb4:	54000720 	b.eq	0xffff3098		; STALL_RETURN
 
 ffff2fb8:	39400c20 	ldrb	w0, [x1, #3]
 ffff2fbc:	39400821 	ldrb	w1, [x1, #2]
-ffff2fc0:	f9402662 	ldr	x2, [x19, #0x48]
-ffff2fc4:	2a002020 	orr	w0, w1, w0, lsl #8
+ffff2fc0:	f9402662 	ldr	x2, [x19, #0x48]	; usb hw
+ffff2fc4:	2a002020 	orr	w0, w1, w0, lsl #8	; 16 bits
+
+; USB register c700 = device config
+; first clear bits 0011_1111_1000, i.e. 9:3 (device address)
+; then shift address left 3 bits to insert it there.
+
 ffff2fc8:	b9460041 	ldr	w1, [x2, #0x600]
 ffff2fcc:	12166021 	and	w1, w1, #0xfffffc07
 ffff2fd0:	2a000c21 	orr	w1, w1, w0, lsl #3
 ffff2fd4:	b9060041 	str	w1, [x2, #0x600]
+
 ffff2fd8:	7100001f 	cmp	w0, #0x0
-ffff2fdc:	528000c0 	mov	w0, #0x6
-ffff2fe0:	528000a1 	mov	w1, #0x5
+ffff2fdc:	528000c0 	mov	w0, #0x6		; for addr != 0
+ffff2fe0:	528000a1 	mov	w1, #0x5		; for addr == 0
 ffff2fe4:	1a800020 	csel	w0, w1, w0, eq
 ffff2fe8:	b9006260 	str	w0, [x19, #0x60]	; pete = 5 or 6
+
 ffff2fec:	1400003c 	b	0xffff30dc		; return
 
 ; still going ...  usb_one ()
 
+; ---------------------------------------------------
+; We got a setup packet, but we don't much like it
+
 ffff2ff0:	aa1303e0 	mov	x0, x19
 ffff2ff4:	94000054 	bl	0xffff3144		; usb_xfer3
 ffff2ff8:	14000039 	b	0xffff30dc		; return
+
+; --------------------------------------------------------------------------
+; --------------------------------------------------------------------------
 
 ; here when we want to set up a response
 ; with the vendor/product code
@@ -4619,23 +4669,53 @@ ffff2ffc:	7100045f 	cmp	w2, #0x1
 ffff3000:	540006e1 	b.ne	0xffff30dc		; return
 ffff3004:	363006c0 	tbz	w0, #6, 0xffff30dc	; return
 
-ffff3008:	39401c20 	ldrb	w0, [x1, #7]
-ffff300c:	39401821 	ldrb	w1, [x1, #6]
-ffff3010:	2a002020 	orr	w0, w1, w0, lsl #8
+ffff3008:	39401c20 	ldrb	w0, [x1, #7]		; J+7
+ffff300c:	39401821 	ldrb	w1, [x1, #6]		; J+6
+ffff3010:	2a002020 	orr	w0, w1, w0, lsl #8	; 16 bit length field
 
-; The following is more or less "if (x > 12) x = 12"
-; heaven knows why lsr is used to copy registers
+; The following is more or less "if (x > 0x12) x = 0x12"
+; we got N from the receive packet bytes 6 and 7
+; but we make sure it is no bigger than 18
+; We want to send 18 bytes, but perhaps our host will not
+; accept that much (which seems unlikely)
+
 ffff3014:	7100481f 	cmp	w0, #0x12
-ffff3018:	52800241 	mov	w1, #0x12	; 18
+ffff3018:	52800241 	mov	w1, #0x12		; 18
 ffff301c:	1a808035 	csel	w21, w1, w0, hi
 ffff3020:	53007ea2 	lsr	w2, w21, #0		; w2 = w21
 
-; The following is interesting because the address fetched is close to
-;  the vendor/ product code
+; The following lump of stuff includes
+;  the vendor/ product code.
+; So we must be responding to a setup packet
+; of some kind.
 
 ; -- ffff4c08: 40000000 02000112
 ; -- ffff4c10: 00000100 330c2207	; vendor/product = 2207, 330c
 ; -- ffff4c18: 00200209 00000100
+
+; The above puts each 8 byte group into big endian order.
+; Here is a dump in proper byte order:
+
+; --- ffff4c08 1201 0002 0000 0040
+; --- ffff4c10 0722 0c33 0001 0000
+; --- ffff4c18 0001 0000 0902 2000
+; --- ffff4c20 0101 0080 c809 0400
+
+; The first byte is the length = 0x12 = 18 (sounds right)
+; The next byte is the descriptor type = 0x01 for device descriptor
+; The next word is the USB spec we are following in BCD = 0x0002 = 2.0
+; The next byte is "device class" = 0
+; The next byte is "device subclass" = 0
+; The next byte is "device protocol" = 0
+; The next byte is "max packet size" = 0x40 = 64
+; The next word is "vendor" = 0722 --> 2207 = Rockchip
+; The next word is "product" = 0c33 --> 330c = RK3399
+; The next word is "device release number" in BCD = 1.0
+; The next byte is an index for manufacturer string (0=no string)
+; The next byte is an index for product string (0=no string)
+
+; The next byte is a serial number = 0
+; The next byte is the number of configs = 1
 
 ffff3024:	b0ffc660 	adrp	x0, 0xff8c0000
 ffff3028:	91070000 	add	x0, x0, #0x1c0		; sram-J
@@ -4650,8 +4730,9 @@ ffff303c:	b9005e60 	str	w0, [x19, #0x5c]	; xfer_code = 2
 
 ffff3040:	aa1303e0 	mov	x0, x19
 ffff3044:	aa1403e1 	mov	x1, x20
-ffff3048:	aa1503e2 	mov	x2, x21		; count
-ffff304c:	94000084 	bl	0xffff325c	; usb_xfer4 ()
+ffff3048:	aa1503e2 	mov	x2, x21
+
+ffff304c:	94000084 	bl	0xffff325c	; usb_xfer4 ( "usb", x20, x21 )
 
 ; is x20 X/Y at this point ??
 ; if so, this extracts "sue"
@@ -4708,6 +4789,7 @@ ffff30c4:	52800103 	mov	w3, #0x8
 ffff30c8:	52800404 	mov	w4, #0x20
 ffff30cc:	aa1303e0 	mov	x0, x19
 ffff30d0:	aa1f03e1 	mov	x1, xzr
+
 ffff30d4:	aa1f03e5 	mov	x5, xzr
 ffff30d8:	97fffe45 	bl	0xffff29ec		; usb_start_transfer ()
 
@@ -4891,7 +4973,7 @@ ffff3258:	d65f03c0 	ret
 ; 2 calls
 ;  one in usb_one (), the other just above in usb_xfer3
 
-ffff325c:	d10103ff 	sub	sp, sp, #0x40
+ffff325c:	d10103ff 	sub	sp, sp, #0x40		; prolog
 ffff3260:	a9037bfd 	stp	x29, x30, [sp, #48]
 ffff3264:	9100c3fd 	add	x29, sp, #0x30
 ffff3268:	a9025ff6 	stp	x22, x23, [sp, #32]
