@@ -3796,6 +3796,7 @@ ffff29e4:	aa1f03e5 	mov	x5, xzr
 ; a second argument of 0 locks this to X (EP0-OUT)
 ; We receive EP0_OUT transfers in sram-J (64 bytes in size)
 
+; usb_start_transfer ( "usb", ep-index, buf, size, ctrl, flag )
 ; usb_start_transfer ( "usb", 0, J, 8, 0x20, 0 )
 
 ffff29e8:	14000001 	b	0xffff29ec		; usb_start_transfer ()
@@ -3806,15 +3807,17 @@ ffff29e8:	14000001 	b	0xffff29ec		; usb_start_transfer ()
 ; subroutine usb_start_transfer ()
 ; note that we have the odd "fall through" from above
 
+; usb_start_transfer ( "usb", ep-index, buf, size, ctrl, flag )
+
 ; arguments:
 ;   x0 = "usb"
 ;   x1 = endpoint index (0 or 1)
 ;   x2 = buf
-;   x3 = A
-;   x4 = B
+;   w3 = A = size
+;   x4 = B = ctrl
 ;   x5 = flag -- 0 or 1
 
-; I had thought x4 was a count, but now I am not so sure. !!??
+; size can be 0.  It is often 8.
 
 ; a typical call is:
 ; usb_start_transfer ( "usb", 0, usb+24 (sram-J), 8, 0x20, 0 )
@@ -3843,7 +3846,7 @@ ffff2a04:	f9401c14 	ldr	x20, [x0, #0x38]	; x20 = X/Y
 ffff2a08:	39406280 	ldrb	w0, [x20, #24]		; "sue"
 ffff2a0c:	37200860 	tbnz	w0, #4, 0xffff2b18	; return if TIP set
 
-; This business of the counter in [x20] baffles me.
+; This business of the counter in [x20] is somewhat surprising.
 ; it seems that it would count along forever
 ; and cause us to offset into K further and further along.
 ;  K is only 32 bytes in size.
@@ -3858,12 +3861,22 @@ ffff2a18:	53007cc1 	lsr	w1, w6, #0		; w1 = w6 (wally)
 
 ; test flag argument (usually 0, sometimes 1)
 ; if it is 1, increment the counter in X/Y
+; otherwise, just leave it alone.
+
 ffff2a1c:	34000065 	cbz	w5, 0xffff2a28
 ffff2a20:	110004c6 	add	w6, w6, #0x1		; w6++  (wally++)
 ffff2a24:	b9000286 	str	w6, [x20]
 
 ffff2a28:	8b217006 	add	x6, x0, x1, uxtx #4	; x6 = sram-K + count<<4
 ffff2a2c:	d37cec21 	lsl	x1, x1, #4		; count *= 16
+
+; x0 = base of sram-K
+; x1 = either 0 or 16
+; x2 = buf passed as argument
+; x6 = either sram-K or sram-K+16
+
+; in truth we don't need both x1 and x6, but the code is fickle
+; and uses either at different times.
 
 ; We are going to move the 64 bit address in x2, byte by byte into sram-K
 ; x0 points to sram-K at the very start
@@ -3873,6 +3886,15 @@ ffff2a2c:	d37cec21 	lsl	x1, x1, #4		; count *= 16
 ; All told we move 16 bytes into K, which is 32 bytes in size.
 ; if count is anything other than 0 or 1, we are in trouble,
 ; but I don't see any guard against that here.
+
+; So, after some research and analysis, here is what is going on here.
+; These 16 bit objects are "trb" objects (transfer request blocks)
+; If we had the synology documents we would know more about them.
+; They have 4 32 bit objects like this
+;   bpl = low 32 bits of buffer address
+;   bph = high 32 bits of buffer address
+;   size
+;   ctrl = tricky undocumented bits
 
 ; move w2 (buf) 8 bytes
 ffff2a30:	38216802 	strb	w2, [x0, x1]		; KK[0] = w2>>0
@@ -3891,7 +3913,7 @@ ffff2a60:	d368fc41 	lsr	x1, x2, #40
 ffff2a64:	390014c1 	strb	w1, [x6, #5]		; kk[5] = x2>>40
 ffff2a68:	390010c0 	strb	w0, [x6, #4]		; kk[4] = x2>>32
 
-; move w3 (arg A) 4 bytes
+; move w3 (size) 4 bytes
 ffff2a6c:	53187c60 	lsr	w0, w3, #24
 ffff2a70:	39002cc0 	strb	w0, [x6, #11]		; kk[11] = w3>>24
 ffff2a74:	53107c60 	lsr	w0, w3, #16
@@ -3900,29 +3922,57 @@ ffff2a7c:	53087c60 	lsr	w0, w3, #8
 ffff2a80:	390024c0 	strb	w0, [x6, #9]		; kk[9] = w3<<8
 ffff2a84:	390020c3 	strb	w3, [x6, #8]		; kk[8] = w3<<0
 
-; This flag is 0 or 1
+; Now reference the flag argument again (either 0 or 1)
 ffff2a88:	710000bf 	cmp	w5, #0x0
-ffff2a8c:	52818060 	mov	w0, #0xc03		; for flag == 0
-ffff2a90:	528080a1 	mov	w1, #0x405		; for flag == 1
+ffff2a8c:	52818060 	mov	w0, #0xc03		; xxx = 0xc03 for flag == 0
+ffff2a90:	528080a1 	mov	w1, #0x405		; XXX = 0x405 for flag == 1
 ffff2a94:	1a801020 	csel	w0, w1, w0, ne
 
-ffff2a98:	2a040000 	orr	w0, w0, w4		; combine with w4 (arg B)
+; The above sets the basic "ctrl" bits in the TRB
+;  there is a command in the middle (shifted left 4 bits)
+;  that we get from the call arguments and OR into the middle of these
+;
+;  0xc03 = 1100_0000_0011  
+;  0x405 = 0100_0000_0101
+;
+; bit 0 = HWO -- who knows, always set
+; bit 1 = LST
+; bit 2 = CHN - "chain"
+; bit 3 = CSP - never used here
+; bits 4 ... 9 "mode" (see below)
+; bit 10 = ISP_IMI -- always set
+; bit 11 = IOC -- "interrupt on completion"
+
+; The "mode" command arguments I see are:
+;   0x20 (i.e. 2) -- control setup
+;   0x50 (i.e. 5) -- control data
+;   0x30 + x == control status2
+;
+; this information is gleaned from the unix driver at drivers/usb/dwc3
+
+; We combine either 0xc03 or 0x405 with arg B and put the result in w0
+; Then this result (as a 32 bit item) goes into the K block
+
+ffff2a98:	2a040000 	orr	w0, w0, w4		; w0 = "arg B" | xxx
 
 ffff2a9c:	53187c01 	lsr	w1, w0, #24
-ffff2aa0:	39003cc1 	strb	w1, [x6, #15]		; kk[15] = w4>>24
+ffff2aa0:	39003cc1 	strb	w1, [x6, #15]		; kk[15] = w0>>24
 ffff2aa4:	53107c01 	lsr	w1, w0, #16
-ffff2aa8:	390038c1 	strb	w1, [x6, #14]		; kk[14] = w4>>16
+ffff2aa8:	390038c1 	strb	w1, [x6, #14]		; kk[14] = w0>>16
 ffff2aac:	53087c01 	lsr	w1, w0, #8
-ffff2ab0:	390034c1 	strb	w1, [x6, #13]		; kk[13] = w4>>8
-ffff2ab4:	390030c0 	strb	w0, [x6, #12]		; kk[12] = w4>>0
+ffff2ab0:	390034c1 	strb	w1, [x6, #13]		; kk[13] = w0>>8
+ffff2ab4:	390030c0 	strb	w0, [x6, #12]		; kk[12] = w0>>0
 
-; This is surprising.  We return here if the final argument was 1
+; Now we have constructed a 16 byte block of stuff in one of the
+; two slots in sram-K and we have
+
+; This is surprising.  We return here if the flag argument was 1
 ; in that case, we would have set up the sram-K information, but done nothing with it.
 
 ffff2ab8:	35000305 	cbnz	w5, 0xffff2b18		; return if flag != 0
 
-; Now we construct a 3 word param block that simply holds
-; a pointer to the sram-K block.
+; Now we construct a 3 word param block on the stack
+; It simply holds a pointer to the sram-K block we just built
 
 ffff2abc:	b90003ff 	str	wzr, [sp]		; param[0] = 0
 ffff2ac0:	f9401260 	ldr	x0, [x19, #32]		; sram-K address
@@ -3953,6 +4003,7 @@ ffff2af4:	b9001a80 	str	w0, [x20, #24]		; "sue"
 ; we calculate x0 = ep-index * 16, then use that
 ; as an offset to get the "endpoint-n command register
 ; for that endpoint.
+; (there are command registers for each endpoint and we select the right one)
 
 ; We extract a 7 bit bitfield starting at 16
 ; i.e bits 22:16.
@@ -4521,10 +4572,12 @@ ffff2ec8:	b9005a60 	str	w0, [x19, #0x58]	; jane = 1
 ffff2ecc:	f9400e62 	ldr	x2, [x19, #24]		; sram-J
 
 ; parameters for the call to usb_start_transfer ()
-ffff2ed0:	52800a04 	mov	w4, #0x50
-ffff2ed4:	aa1303e0 	mov	x0, x19
-ffff2ed8:	aa1403e1 	mov	x1, x20
-ffff2edc:	aa1f03e3 	mov	x3, xzr
+; usb_start_transfer ( "usb", ep-index, buf, size, ctrl, flag )
+
+ffff2ed0:	52800a04 	mov	w4, #0x50	; ctrl
+ffff2ed4:	aa1303e0 	mov	x0, x19		; "usb"
+ffff2ed8:	aa1403e1 	mov	x1, x20		; ep-index
+ffff2edc:	aa1f03e3 	mov	x3, xzr		; size (0 eh?)
 ffff2ee0:	1400007d 	b	0xffff30d4	; short cut into TRANS_RETURN
 
 ; ------------------------------------------------------------------
@@ -4867,12 +4920,13 @@ ffff30bc:	b9005e75 	str	w21, [x19, #0x5c]	; xfer_code = 1
 ; TRANS_RETURN
 ; a second argument of 0 locks this to X (EP0-OUT)
 ; usb_start_transfer ( "usb", 0, J, 8, 0x20, 0 )
+; usb_start_transfer ( "usb", ep-index, buf, size, ctrl, flag )
 
-ffff30c0:	f9400e62 	ldr	x2, [x19, #24]		; sram-J
-ffff30c4:	52800103 	mov	w3, #0x8
-ffff30c8:	52800404 	mov	w4, #0x20
-ffff30cc:	aa1303e0 	mov	x0, x19
-ffff30d0:	aa1f03e1 	mov	x1, xzr
+ffff30c0:	f9400e62 	ldr	x2, [x19, #24]	; sram-J
+ffff30c4:	52800103 	mov	w3, #0x8	; size = 8
+ffff30c8:	52800404 	mov	w4, #0x20	; ctrl
+ffff30cc:	aa1303e0 	mov	x0, x19		; "usb"
+ffff30d0:	aa1f03e1 	mov	x1, xzr		; ep-index = 0
 
 ffff30d4:	aa1f03e5 	mov	x5, xzr
 ffff30d8:	97fffe45 	bl	0xffff29ec		; usb_start_transfer ()
@@ -4929,14 +4983,15 @@ ffff3128:	39408021 	ldrb	w1, [x1, #32]		; ep-index
 ; w4 = 0x30 + (lucy&0x40) >> 2
 ffff312c:	121a0063 	and	w3, w3, #0x40
 ffff3130:	52800604 	mov	w4, #0x30
-ffff3134:	0b430884 	add	w4, w4, w3, lsr #2
+ffff3134:	0b430884 	add	w4, w4, w3, lsr #2	; ctrl
 
-ffff3138:	aa1f03e3 	mov	x3, xzr
-ffff313c:	aa1f03e5 	mov	x5, xzr
+ffff3138:	aa1f03e3 	mov	x3, xzr		; size = 0 (hmmm ...)
+ffff313c:	aa1f03e5 	mov	x5, xzr		; flag
 
 ; note that the endpoint for the following is taken from the event
 
 ; usb_start_transfer ( "usb", ep-index, sram-J, 0, 0x30 + flags, 0 )
+; usb_start_transfer ( "usb", ep-index, buf, size, ctrl, flag )
 
 ffff3140:	17fffe2b 	b	0xffff29ec		; usb_start_transfer ()
 
@@ -5010,13 +5065,14 @@ ffff31e0:	b9005e75 	str	w21, [x19, #0x5c]	; xfer_code = 1
 
 ; a second argument of 0 locks this to X (EP0-OUT)
 ; usb_start_transfer ( "usb", 0, sram-J, 8, 0x20, 0 )
+; usb_start_transfer ( "usb", ep-index, buf, size, ctrl, flag )
 
-ffff31e4:	f9400e62 	ldr	x2, [x19, #24]		; sram-J
-ffff31e8:	52800103 	mov	w3, #0x8
-ffff31ec:	52800404 	mov	w4, #0x20
-ffff31f0:	aa1303e0 	mov	x0, x19
-ffff31f4:	aa1f03e1 	mov	x1, xzr
-ffff31f8:	aa1f03e5 	mov	x5, xzr
+ffff31e4:	f9400e62 	ldr	x2, [x19, #24]	; sram-J
+ffff31e8:	52800103 	mov	w3, #0x8	; size = 8
+ffff31ec:	52800404 	mov	w4, #0x20	; ctrl = 0x20
+ffff31f0:	aa1303e0 	mov	x0, x19		; "usb"
+ffff31f4:	aa1f03e1 	mov	x1, xzr		; ep-index = 0
+ffff31f8:	aa1f03e5 	mov	x5, xzr		; flag = 0
 ffff31fc:	97fffdfc 	bl	0xffff29ec		; usb_start_transfer ()
 ffff3200:	14000012 	b	0xffff3248		; return
 
@@ -5127,13 +5183,14 @@ ffff32fc:	1b177c56 	mul	w22, w2, w23
 ; a second argument of 0 locks this to X (EP0-OUT)
 
 ; usb_start_transfer ( "usb", 0, buf, x22, 0x50, 1 )
+; usb_start_transfer ( "usb", ep-index, buf, size, ctrl, flag )
 
-ffff3300:	8b000022 	add	x2, x1, x0		; buf = sam + bob
-ffff3304:	52800a04 	mov	w4, #0x50
-ffff3308:	52800025 	mov	w5, #0x1
-ffff330c:	aa1303e0 	mov	x0, x19
-ffff3310:	aa1f03e1 	mov	x1, xzr
-ffff3314:	aa1603e3 	mov	x3, x22
+ffff3300:	8b000022 	add	x2, x1, x0	; buf = sam + bob
+ffff3304:	52800a04 	mov	w4, #0x50	; ctrl
+ffff3308:	52800025 	mov	w5, #0x1	; flag
+ffff330c:	aa1303e0 	mov	x0, x19		; "usb"
+ffff3310:	aa1f03e1 	mov	x1, xzr		; ep-index = 0
+ffff3314:	aa1603e3 	mov	x3, x22		; size
 ffff3318:	97fffdb5 	bl	0xffff29ec		; usb_start_transfer ()
 
 ffff331c:	1400000a 	b	0xffff3344
@@ -5161,17 +5218,18 @@ ffff3354:	39019660 	strb	w0, [x19, #0x65]	; lucy |= 0x2
 ;  no telling yet what the game is with that
 
 ; usb_start_transfer ( "usb", endpoint-index, "buf", x, 0x50, 0 )
+; usb_start_transfer ( "usb", ep-index, buf, size, ctrl, flag )
 
 ffff3358:	f9401662 	ldr	x2, [x19, #0x28]	; "buf" = sram-L
 ffff335c:	394082a1 	ldrb	w1, [x21, #32]		; ep-index
 ffff3360:	51000460 	sub	w0, w3, #0x1
 ffff3364:	1ad70800 	udiv	w0, w0, w23
-ffff3368:	1b177c03 	mul	w3, w0, w23
-ffff336c:	52800a04 	mov	w4, #0x50
-ffff3370:	aa1303e0 	mov	x0, x19
+ffff3368:	1b177c03 	mul	w3, w0, w23		; size
+ffff336c:	52800a04 	mov	w4, #0x50		; ctrl
+ffff3370:	aa1303e0 	mov	x0, x19			; "usb"
 
 ; 3 ways to get here
-ffff3374:	aa1f03e5 	mov	x5, xzr
+ffff3374:	aa1f03e5 	mov	x5, xzr			; flag = 0
 ffff3378:	97fffd9d 	bl	0xffff29ec		; usb_start_transfer ()
 
 ; done
