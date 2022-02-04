@@ -3807,7 +3807,7 @@ ffff29e8:	14000001 	b	0xffff29ec		; usb_start_transfer ()
 ; subroutine usb_start_transfer ()
 ; note that we have the odd "fall through" from above
 
-; usb_start_transfer ( "usb", ep-index, buf, size, ctrl, flag )
+; usb_start_transfer ( "usb", ep-index, buf, size, ctrl, arg_flag )
 
 ; arguments:
 ;   x0 = "usb"
@@ -3815,7 +3815,7 @@ ffff29e8:	14000001 	b	0xffff29ec		; usb_start_transfer ()
 ;   x2 = buf
 ;   w3 = A = size
 ;   x4 = B = ctrl
-;   x5 = flag -- 0 or 1
+;   x5 = arg_flag -- 0 or 1
 
 ; size can be 0.  It is often 8.
 
@@ -3851,22 +3851,24 @@ ffff2a0c:	37200860 	tbnz	w0, #4, 0xffff2b18	; return if TIP set
 ; and cause us to offset into K further and further along.
 ;  K is only 32 bytes in size.
 
-; call this counter "wally"
+; call this counter "trb_slot"
 ; it does get set back to 0 when usb_one() handles a "xfer complete"
 ; apparently it is only possible to have at most 2 pending transfers.
 
-ffff2a10:	b9400286 	ldr	w6, [x20]		; counter from X/Y + 0 (wally)
+ffff2a10:	b9400286 	ldr	w6, [x20]		; counter from X/Y + 0 (trb_slot)
 ffff2a14:	f9400660 	ldr	x0, [x19, #8]		; sram-K
-ffff2a18:	53007cc1 	lsr	w1, w6, #0		; w1 = w6 (wally)
+ffff2a18:	53007cc1 	lsr	w1, w6, #0		; w1 = w6 (trb_slot)
 
-; test flag argument (usually 0, sometimes 1)
-; if it is 1, increment the counter in X/Y
-; otherwise, just leave it alone.
+; test arg_flag (usually 0, sometimes 1)
+; if it is 1, increment the counter in X/Y and store for next time
+; so the TRB set up by the next call goes in the next slot
 
 ffff2a1c:	34000065 	cbz	w5, 0xffff2a28
-ffff2a20:	110004c6 	add	w6, w6, #0x1		; w6++  (wally++)
+ffff2a20:	110004c6 	add	w6, w6, #0x1		; w6++  (trb_slot++)
 ffff2a24:	b9000286 	str	w6, [x20]
 
+; we will now use the non-incremented counter
+; (this could have been incremented by a previous call)
 ffff2a28:	8b217006 	add	x6, x0, x1, uxtx #4	; x6 = sram-K + count<<4
 ffff2a2c:	d37cec21 	lsl	x1, x1, #4		; count *= 16
 
@@ -3922,7 +3924,7 @@ ffff2a7c:	53087c60 	lsr	w0, w3, #8
 ffff2a80:	390024c0 	strb	w0, [x6, #9]		; kk[9] = w3<<8
 ffff2a84:	390020c3 	strb	w3, [x6, #8]		; kk[8] = w3<<0
 
-; Now reference the flag argument again (either 0 or 1)
+; Now reference arg_flag again (either 0 or 1)
 ffff2a88:	710000bf 	cmp	w5, #0x0
 ffff2a8c:	52818060 	mov	w0, #0xc03		; xxx = 0xc03 for flag == 0
 ffff2a90:	528080a1 	mov	w1, #0x405		; XXX = 0x405 for flag == 1
@@ -3932,8 +3934,8 @@ ffff2a94:	1a801020 	csel	w0, w1, w0, ne
 ;  there is a command in the middle (shifted left 4 bits)
 ;  that we get from the call arguments and OR into the middle of these
 ;
-;  0xc03 = 1100_0000_0011  
-;  0x405 = 0100_0000_0101
+;  arg_flag == 0 --  0xc03 = 1100_0000_0011  
+;  arg_flag == 1 --  0x405 = 0100_0000_0101  (chain bit set)
 ;
 ; bit 0 = HWO -- who knows, always set
 ; bit 1 = LST
@@ -3966,13 +3968,21 @@ ffff2ab4:	390030c0 	strb	w0, [x6, #12]		; kk[12] = w0>>0
 ; Now we have constructed a 16 byte block of stuff in one of the
 ; two slots in sram-K and we have
 
-; This is surprising.  We return here if the flag argument was 1
-; in that case, we would have set up the sram-K information, but done nothing with it.
+; We return here if arg_flag argument is 1
+; This surprised and perplexed me at first, but now I understand.
+; When we call this routine with arg_flag == 1, we set up a TRB
+; with the chain bit set, and leave it waiting for a subsequent call with arg_flag == 0
+; The second call will load the second TRB slot, then the call below
+; will pass the address of the first TRB to the start_transfer call.
+; It all makes sense.
 
-ffff2ab8:	35000305 	cbnz	w5, 0xffff2b18		; return if flag != 0
+ffff2ab8:	35000305 	cbnz	w5, 0xffff2b18		; return if arg_flag != 0
 
 ; Now we construct a 3 word param block on the stack
 ; It simply holds a pointer to the sram-K block we just built
+: Important: this holds the unmolested base of K,
+; not the possibly incremented place where we just built
+; a second TRB
 
 ffff2abc:	b90003ff 	str	wzr, [sp]		; param[0] = 0
 ffff2ac0:	f9401260 	ldr	x0, [x19, #32]		; sram-K address
@@ -4383,7 +4393,9 @@ ffff2d68:	8b274042 	add	x2, x2, w7, uxtw	; x2 += w7
 ffff2d6c:	2a0320a3 	orr	w3, w5, w3, lsl #8
 ffff2d70:	2a064063 	orr	w3, w3, w6, lsl #16	; 24 bit value
 
-ffff2d74:	b90002bf 	str	wzr, [x21]		; "wally" = 0
+; Whether or not the completed transfer was a single or
+; a chain of 2, we set the slot pointer to zero.
+ffff2d74:	b90002bf 	str	wzr, [x21]		; "trb_slot" = 0
 ffff2d78:	1400002c 	b	0xffff2e28
 
 ; ---------------------------------
@@ -5921,7 +5933,7 @@ ffff385c:	94000308 	bl	0xffff447c		; memset ( addr, 0, 0x40 );
 ; block X is for EP0-OUT   at SRAM + 0x318
 ; block Y is for EP0-IN    at SRAM + 0x340
 
-; X/Y + 0 -- "wally"
+; X/Y + 0 -- "trb_slot"
 ; X/Y + 4
 ; X/Y + 8 -- "usb" (8 bytes	
 ; X/Y + 12 -  ...
