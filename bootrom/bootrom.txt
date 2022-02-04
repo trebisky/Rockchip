@@ -3891,6 +3891,7 @@ ffff2a2c:	d37cec21 	lsl	x1, x1, #4		; count *= 16
 
 ; So, after some research and analysis, here is what is going on here.
 ; These 16 bit objects are "trb" objects (transfer request blocks)
+;
 ; If we had the synology documents we would know more about them.
 ; They have 4 32 bit objects like this
 ;   bpl = low 32 bits of buffer address
@@ -3975,6 +3976,8 @@ ffff2ab4:	390030c0 	strb	w0, [x6, #12]		; kk[12] = w0>>0
 ; The second call will load the second TRB slot, then the call below
 ; will pass the address of the first TRB to the start_transfer call.
 ; It all makes sense.
+;
+; both calls that get chained are in usb_xfer4()
 
 ffff2ab8:	35000305 	cbnz	w5, 0xffff2b18		; return if arg_flag != 0
 
@@ -5002,8 +5005,8 @@ ffff313c:	aa1f03e5 	mov	x5, xzr		; flag
 
 ; note that the endpoint for the following is taken from the event
 
-; usb_start_transfer ( "usb", ep-index, sram-J, 0, 0x30 + flags, 0 )
 ; usb_start_transfer ( "usb", ep-index, buf, size, ctrl, flag )
+; usb_start_transfer ( "usb", ep-index, sram-J, 0, 0x30 + flags, 0 )
 
 ffff3140:	17fffe2b 	b	0xffff29ec		; usb_start_transfer ()
 
@@ -5076,8 +5079,8 @@ ffff31dc:	b9001a95 	str	w21, [x20, #24]		; again (maybe it changed?)
 ffff31e0:	b9005e75 	str	w21, [x19, #0x5c]	; xfer_code = 1
 
 ; a second argument of 0 locks this to X (EP0-OUT)
-; usb_start_transfer ( "usb", 0, sram-J, 8, 0x20, 0 )
 ; usb_start_transfer ( "usb", ep-index, buf, size, ctrl, flag )
+; usb_start_transfer ( "usb", 0, sram-J, 8, 0x20, 0 )
 
 ffff31e4:	f9400e62 	ldr	x2, [x19, #24]	; sram-J
 ffff31e8:	52800103 	mov	w3, #0x8	; size = 8
@@ -5188,14 +5191,17 @@ ffff32f8:	1ad70a82 	udiv	w2, w20, w23
 ffff32fc:	1b177c56 	mul	w22, w2, w23
 
 ; A note on the following call.
-; This is the only call to usb_start_transfer with the final argument of 1
-; This tells usb_start_transfer to construct the information
-; in the "sram-K" block, then return without doing anything with it
+; This is the ONLY call to usb_start_transfer with the final argument of 1
+; So the TRB for this transfer is built with the "chain bit" set
+; and it will wait for the NEXT call somewhere to usb_start_transfer
+; to be tacked on after it and the pair will be sent.
+; that next call follows below.
+; there is all kinds of logic in this routine, so pay attention.
 
 ; a second argument of 0 locks this to X (EP0-OUT)
 
-; usb_start_transfer ( "usb", 0, buf, x22, 0x50, 1 )
 ; usb_start_transfer ( "usb", ep-index, buf, size, ctrl, flag )
+; usb_start_transfer ( "usb", 0, buf, x22, 0x50, 1 )
 
 ffff3300:	8b000022 	add	x2, x1, x0	; buf = sam + bob
 ffff3304:	52800a04 	mov	w4, #0x50	; ctrl
@@ -5203,19 +5209,21 @@ ffff3308:	52800025 	mov	w5, #0x1	; flag
 ffff330c:	aa1303e0 	mov	x0, x19		; "usb"
 ffff3310:	aa1f03e1 	mov	x1, xzr		; ep-index = 0
 ffff3314:	aa1603e3 	mov	x3, x22		; size
+
 ffff3318:	97fffdb5 	bl	0xffff29ec		; usb_start_transfer ()
 
 ffff331c:	1400000a 	b	0xffff3344
 
+; -------------------
 ffff3320:	f9403a60 	ldr	x0, [x19, #0x70]	; sam
 ffff3324:	b9406a61 	ldr	w1, [x19, #0x68]	; bob
 ffff3328:	8b000022 	add	x2, x1, x0		; "buf" = sam + bob
 
-ffff332c:	52800a04 	mov	w4, #0x50
-ffff3330:	aa1303e0 	mov	x0, x19
-ffff3334:	aa1f03e1 	mov	x1, xzr
-ffff3338:	aa1403e3 	mov	x3, x20
-ffff333c:	1400000e 	b	0xffff3374		; short cut to finish
+ffff332c:	52800a04 	mov	w4, #0x50	; ctrl
+ffff3330:	aa1303e0 	mov	x0, x19		; "usb"
+ffff3334:	aa1f03e1 	mov	x1, xzr		; ep-index = 0
+ffff3338:	aa1403e3 	mov	x3, x20		; size
+ffff333c:	1400000e 	b	0xffff3374	; short cut to finish
 
 ffff3340:	2a1f03f6 	mov	w22, wzr
 
@@ -5226,11 +5234,11 @@ ffff3350:	321f0000 	orr	w0, w0, #0x2
 ffff3354:	39019660 	strb	w0, [x19, #0x65]	; lucy |= 0x2
 
 ; We get here with w21 = X/Y
-; the argument I denote by "x" gets calculated
-;  no telling yet what the game is with that
+; the argument I denote by "size" gets calculated,
+;  no telling yet what the game is with that.
 
-; usb_start_transfer ( "usb", endpoint-index, "buf", x, 0x50, 0 )
 ; usb_start_transfer ( "usb", ep-index, buf, size, ctrl, flag )
+; usb_start_transfer ( "usb", endpoint-index, "buf", size, 0x50, 0 )
 
 ffff3358:	f9401662 	ldr	x2, [x19, #0x28]	; "buf" = sram-L
 ffff335c:	394082a1 	ldrb	w1, [x21, #32]		; ep-index
