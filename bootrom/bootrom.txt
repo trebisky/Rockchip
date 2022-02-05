@@ -4065,16 +4065,7 @@ ffff2b24:	d65f03c0 	ret
 ; I don't know why the event itself was not passed
 ; since it is just a 32 bit object
 ;
-; ubfx is "bitfield extract"
-;	ubfx	w1, w0, #6, #4
-;  the above would extract from w0 to w1
-;  6 is the starting bit, 4 is the number of bits
-;  i.e. 9:4 in this case
-;  this is a nice way to replace the usual mask and shift
-;  In C code, this would be:
-;	dest = (src >> lsb) & ((1 << width) - 1);
-
-ffff2b28:	d10143ff 	sub	sp, sp, #0x50
+ffff2b28:	d10143ff 	sub	sp, sp, #0x50		; prolog
 ffff2b2c:	a9047bfd 	stp	x29, x30, [sp, #64]
 ffff2b30:	910103fd 	add	x29, sp, #0x40
 ffff2b34:	a9035ff6 	stp	x22, x23, [sp, #48]
@@ -4118,6 +4109,16 @@ ffff2b60:	2a004020 	orr	w0, w1, w0, lsl #16
 
 ffff2b64:	53062401 	ubfx	w1, w0, #6, #4
 
+; ubfx is "bitfield extract"
+;	ubfx	w1, w0, #6, #4
+
+; This extracts bits 9:6, 
+;  The way ubfx works here is that it
+;  extracts bits from w0 to w1, placing the extracted
+;  bits at the right side of w1 (the destination register)
+;  Here, 6 is the starting bit, 4 is the number of bits
+;  this is a nice way to replace the usual mask and shift
+
 ; ----------------------------------- ---------------------------------------
 ; ----------------------------------- ---------------------------------------
 
@@ -4129,7 +4130,10 @@ ffff2b64:	53062401 	ubfx	w1, w0, #6, #4
 ;	D -- Xfer complete, xfer_code 2
 ;	E -- Xfer complete, xfer_code 3
 
-; is it 1 ? (Xfer not Ready)
+; we have the entire event in w0,
+; and the "device event" in w1, we need to avoid confusing these
+
+; is the device event 3 ? (Xfer not Ready)
 ffff2b68:	71000c3f 	cmp	w1, #0x3
 ffff2b6c:	54000921 	b.ne	0xffff2c90
 
@@ -4159,6 +4163,7 @@ ffff2b94:	2a024062 	orr	w2, w3, w2, lsl #16
 ; Now extract bits 15:12 from the event
 ; this is status
 ; the bits in status vary according to type.
+
 ffff2b98:	530c3c43 	ubfx	w3, w2, #12, #4
 
 ; The "2" bit indicates "short"
@@ -4172,6 +4177,7 @@ ffff2ba0:	54000ee1 	b.ne	0xffff2d7c
 
 ; "jane" is either 1 or 3
 ; this is the only place we test it
+
 ffff2ba4:	b9405a61 	ldr	w1, [x19, #0x58]	; jane
 ffff2ba8:	71000c3f 	cmp	w1, #0x3
 ffff2bac:	54002981 	b.ne	0xffff30dc		return if ne 3
@@ -4194,7 +4200,7 @@ ffff2bd4:	aa1403e1 	mov	x1, x20			; ptr to event
 ffff2bd8:	94000147 	bl	0xffff30f4		; usb_xfer2 ( "usb" )
 
 ffff2bdc:	39419660 	ldrb	w0, [x19, #0x65]	; lucy
-ffff2be0:	36280440 	tbz	w0, #5, 0xffff2c68	; test 0x20
+ffff2be0:	36280440 	tbz	w0, #5, 0xffff2c68	; test bit 0x20
 
 ffff2be4:	7940da60 	ldrh	w0, [x19, #0x6c]	; "joe"
 ffff2be8:	12002c00 	and	w0, w0, #0xfff
@@ -4274,7 +4280,7 @@ ffff2c7c:	54002301 	b.ne	0xffff30dc		; return if ne 0x471
 
 ffff2c80:	aa1303e0 	mov	x0, x19			; "usb"
 ffff2c84:	aa1403e1 	mov	x1, x20			; ptr to event
-ffff2c88:	9400011b 	bl	0xffff30f4		; usb_xfer2 ( "usb", x )
+ffff2c88:	9400011b 	bl	0xffff30f4		; usb_xfer2 ( "usb", event-pointer )
 ffff2c8c:	14000114 	b	0xffff30dc		; return
 
 ; END of Xfer not ready with status short (we returned above)
@@ -4282,9 +4288,9 @@ ffff2c8c:	14000114 	b	0xffff30dc		; return
 ; ---------------------------------------
 ; still going ...  usb_one ()
 
-; Here when the event is not Xfer not ready ...
-; The only other event this routine is willing to handle is
-; Xfer complete, otherwise we return here
+; Here when the device event is not Xfer not ready ...
+; The only other device event this routine is willing to handle is
+; Xfer complete, otherwise we return and ignore the event
 
 ffff2c90:	7100043f 	cmp	w1, #0x1
 ffff2c94:	54002241 	b.ne	0xffff30dc		; return
@@ -4320,10 +4326,10 @@ ffff2cbc:	39019662 	strb	w2, [x19, #0x65]	; clear 0x01 in lucy
 
 ffff2cc0:	b9405e61 	ldr	w1, [x19, #0x5c]	; get xfer_code
 ffff2cc4:	71000c3f 	cmp	w1, #0x3
-ffff2cc8:	54000820 	b.eq	0xffff2dcc		; Go handle 3
+ffff2cc8:	54000820 	b.eq	0xffff2dcc		; Go handle 3 (E)
 
 ffff2ccc:	7100083f 	cmp	w1, #0x2
-ffff2cd0:	54000841 	b.ne	0xffff2dd8		; Go handle 1
+ffff2cd0:	54000841 	b.ne	0xffff2dd8		; Go handle 1 (C)
 
 ; fall thru to handle 2
 
@@ -4416,10 +4422,11 @@ ffff2d7c:	7100047f 	cmp	w3, #0x1
 ffff2d80:	54001ae1 	b.ne	0xffff30dc		; return if ne 1
 
 ; Yep, it was buserr
-ffff2d84:	53020820 	ubfx	w0, w1, #2, #1
-ffff2d88:	53011441 	ubfx	w1, w2, #1, #5
+ffff2d84:	53020820 	ubfx	w0, w1, #2, #1		; bits 3:2 from ...
+ffff2d88:	53011441 	ubfx	w1, w2, #1, #5		; bits 5:1 from ...
 ffff2d8c:	6b21401f 	cmp	w0, w1, uxtw
 ffff2d90:	54001a60 	b.eq	0xffff30dc		; return if ...
+
 ffff2d94:	8b200e60 	add	x0, x19, w0, uxtb #3
 ffff2d98:	f9401c14 	ldr	x20, [x0, #0x38]	; X/Y ???
 ffff2d9c:	39408a80 	ldrb	w0, [x20, #0x22]
@@ -4474,12 +4481,17 @@ ffff2ddc:	54001801 	b.ne	0xffff30dc		; return
 ; *** apparently we have received a packet in sram-J
 
 ffff2de0:	f9400261 	ldr	x1, [x19]		; sram-J
+
 ffff2de4:	39401c23 	ldrb	w3, [x1, #7]
 ffff2de8:	39401824 	ldrb	w4, [x1, #6]
-ffff2dec:	2a032083 	orr	w3, w4, w3, lsl #8
-ffff2df0:	340007a3 	cbz	w3, 0xffff2ee4		; below
+ffff2dec:	2a032083 	orr	w3, w4, w3, lsl #8	; 16 bit length field
+
+ffff2df0:	340007a3 	cbz	w3, 0xffff2ee4		; branch if zero
 
 ; w2 still holds lucy from way above
+; note that this store to lucy
+;    gets immediately overwritten with what we do below.
+
 ffff2df4:	321a0040 	orr	w0, w2, #0x40
 ffff2df8:	39019660 	strb	w0, [x19, #0x65]	; lucy = w2 | 0x40
 
@@ -4492,13 +4504,20 @@ ffff2df8:	39019660 	strb	w0, [x19, #0x65]	; lucy = w2 | 0x40
 ;  So this case copies one bit, but slides it over 2 to the left
 ;  So we are screwing with bit 0x4 in w0
 ;  (and w0 is the last value we fiddled with in lucy
-; 
+ 
+; get first byte from packet, shift right by 7
+; this top bit is 0 for host to device, 1 for device to host
 ffff2dfc:	39400022 	ldrb	w2, [x1]
 ffff2e00:	53077c42 	lsr	w2, w2, #7
+
+; take that one bit in w2 and stick it into w0 in position 2
 ffff2e04:	331e0040 	bfi	w0, w2, #2, #1
 
+; clear the lowest bit in w0
 ffff2e08:	121c7800 	and	w0, w0, #0xfffffff7
-ffff2e0c:	39019660 	strb	w0, [x19, #0x65]	; lucy = w0 & ~0x8
+
+; back into lucky it goes
+ffff2e0c:	39019660 	strb	w0, [x19, #0x65]
 
 ffff2e10:	52800042 	mov	w2, #0x2
 ffff2e14:	14000038 	b	0xffff2ef4
@@ -4609,9 +4628,12 @@ ffff2ee8:	0a020000 	and	w0, w0, w2
 ffff2eec:	39019660 	strb	w0, [x19, #0x65]	; lucy &= 0xb3
 
 ffff2ef0:	52800062 	mov	w2, #0x3
-ffff2ef4:	b9005a62 	str	w2, [x19, #0x58]	; jane = 3
 
-; the first byte in a SETUP packet is "type"
+; may branch here from above
+ffff2ef4:	b9005a62 	str	w2, [x19, #0x58]	; jane = 2 or 3
+
+; the byte 1 in a SETUP packet is "type"
+; look at bits 6:5, we want to see 00 (standard)
 
 ffff2ef8:	39400022 	ldrb	w2, [x1]		; J+0
 ffff2efc:	121b0442 	and	w2, w2, #0x60
@@ -4626,6 +4648,7 @@ ffff2f08:	7100245f 	cmp	w2, #0x9
 ffff2f0c:	540002c0 	b.eq	0xffff2f64
 
 ; request == 6 is "get descriptor"
+; we usually get this as our first packet
 ffff2f10:	7100185f 	cmp	w2, #0x6
 ffff2f14:	54000481 	b.ne	0xffff2fa4
 
@@ -4813,6 +4836,7 @@ ffff2ff8:	14000039 	b	0xffff30dc		; return
 
 ; here when we want to set up a response
 ; with the vendor/product code
+
 ffff2ffc:	7100045f 	cmp	w2, #0x1
 ffff3000:	540006e1 	b.ne	0xffff30dc		; return
 ffff3004:	363006c0 	tbz	w0, #6, 0xffff30dc	; return
@@ -4880,7 +4904,7 @@ ffff3034:	94000507 	bl	0xffff4450		; memcpy ( sram-J, stuff, N )
 ffff3038:	52800040 	mov	w0, #0x2
 ffff303c:	b9005e60 	str	w0, [x19, #0x5c]	; xfer_code = 2
 
-ffff3040:	aa1303e0 	mov	x0, x19
+ffff3040:	aa1303e0 	mov	x0, x19		; "usb"
 ffff3044:	aa1403e1 	mov	x1, x20
 ffff3048:	aa1503e2 	mov	x2, x21		; X/Y ??
 
@@ -5066,6 +5090,7 @@ ffff31b0:	540002a1 	b.ne	0xffff3204
 ;  Here with 0x472
 ffff31b4:	f9003a7f 	str	xzr, [x19, #0x70]	; sam = 0
 ffff31b8:	14000018 	b	0xffff3218
+
 ffff31bc:	f9402260 	ldr	x0, [x19, #0x40]
 
 ffff31c0:	52800035 	mov	w21, #0x1		; value "1"  for xfer_code
@@ -5076,6 +5101,7 @@ ffff31d0:	aa1403e0 	mov	x0, x20
 ffff31d4:	aa1f03e2 	mov	x2, xzr
 ffff31d8:	9400009c 	bl	0xffff3448		; usb_stall ( X/Y, 1, 0 )
 ffff31dc:	b9001a95 	str	w21, [x20, #24]		; again (maybe it changed?)
+
 ffff31e0:	b9005e75 	str	w21, [x19, #0x5c]	; xfer_code = 1
 
 ; a second argument of 0 locks this to X (EP0-OUT)
@@ -5091,6 +5117,7 @@ ffff31f8:	aa1f03e5 	mov	x5, xzr		; flag = 0
 ffff31fc:	97fffdfc 	bl	0xffff29ec		; usb_start_transfer ()
 ffff3200:	14000012 	b	0xffff3248		; return
 
+; come here if w2 != 0x472
 ffff3204:	7111c45f 	cmp	w2, #0x471		; 0x471 magic value
 ffff3208:	540000c1 	b.ne	0xffff3220
 
@@ -5102,6 +5129,7 @@ ffff3214:	f9003a62 	str	x2, [x19, #0x70]	; sam = SRAM
 ffff3218:	321b0000 	orr	w0, w0, #0x20
 ffff321c:	39019660 	strb	w0, [x19, #0x65]	; lucy = w0 | 0x20
 
+; branch to here when w2 != 0x471 or ox472
 ffff3220:	36280140 	tbz	w0, #5, 0xffff3248
 
 ; Here is where "joe" is generated (a 16 bit value)
@@ -5617,6 +5645,10 @@ ffff3628:	b9005e60 	str	w0, [x19, #0x5c]	; xfer_code = 1
 ; usb_start_transfer_x is a wrapper
 ; that sets up a call to usb_start_transfer for ep-index 0 (X or EP0-OUT)
 ; that involves sram-J
+
+; This sets up the first transfer!!  FIRST
+; This is on EP0-OUT (where we receive data)
+; and will deposit what we receive into sram-J
 
 ffff362c:	aa1303e0 	mov	x0, x19
 ffff3630:	97fffce9 	bl	0xffff29d4		; usb_start_transfer_x ( "usb" )
@@ -6137,9 +6169,11 @@ ffff3984:	b9400e81 	ldr	w1, [x20, #12]		; "A" + 12 (offset)
 ffff3988:	b8616800 	ldr	w0, [x0, x1]		; event = B:offset
 ffff398c:	b9000be0 	str	w0, [sp, #8]		; save event on stack
 
-; if low bit in event is set, hand it off to usb_one ()
-;   ( usb_one() handles "endpoint events" )
-; if the bit is set, we will handle the event right here in usb_run
+; if low bit in event is clear, we fall through and
+;  hand it off to usb_one ()
+;  - usb_one() handles "endpoint events"
+; if the bit is set, we branch and handle the event
+;  right here in usb_run (down below)
 ; it is something specific to the device itself
 ;   i.e. a "device event"
 
@@ -6152,9 +6186,9 @@ ffff3990:	37000180 	tbnz	w0, #0, 0xffff39c0
 
 ffff3994:	53011400 	ubfx	w0, w0, #1, #5
 
-; x1 = "usb" + field<<3
-; Some real monkey business here, but it works
-; the following will yield either a pointer to X or Y
+; do some fancy monkey business to use the ep-index to
+;  calculate X or X
+; X/Y = "usb" + ep-index<<3 + 0x38
 ffff3998:	8b204e61 	add	x1, x19, w0, uxtw #3
 ffff399c:	f9401c21 	ldr	x1, [x1, #0x38]		; X or Y
 
@@ -6162,6 +6196,7 @@ ffff399c:	f9401c21 	ldr	x1, [x1, #0x38]		; X or Y
 ffff39a0:	b9401821 	ldr	w1, [x1, #24]		; X/Y + 24 "sue"
 ffff39a4:	36000ac1 	tbz	w1, #0, 0xffff3afc	; next event ..
 
+; we expect only ep-0 or ep-1, this makes sure
 ; test endpoint index
 ffff39a8:	7100041f 	cmp	w0, #0x1
 ffff39ac:	54000a88 	b.hi	0xffff3afc		; next event ..
@@ -6480,11 +6515,16 @@ ffff3bc8:	d65f03c0 	ret
 
 ; this will (if possible) run loaded code eventually
 
-ffff3bcc:	d100c3ff 	sub	sp, sp, #0x30
+ffff3bcc:	d100c3ff 	sub	sp, sp, #0x30		; prolog
 ffff3bd0:	a9027bfd 	stp	x29, x30, [sp, #32]
 ffff3bd4:	910083fd 	add	x29, sp, #0x20
 ffff3bd8:	a90157f4 	stp	x20, x21, [sp, #16]
 ffff3bdc:	f90007f3 	str	x19, [sp, #8]
+
+; The cset is a "conditional set", it yields 1 or 0
+; It yields 1 if the condition is true
+; Its use here seems to be if ( w0 == 1 ) w0 = 1, which is silly
+; Finally we set count = w20 = bob - bob & 1
 
 ffff3be0:	aa0103f3 	mov	x19, x1			; buf = sam
 ffff3be4:	aa0003f5 	mov	x21, x0			; J
