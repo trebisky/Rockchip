@@ -5188,11 +5188,19 @@ ffff31ac:	7111c85f 	cmp	w2, #0x472		; 0x472 magic value
 ffff31b0:	540002a1 	b.ne	0xffff3204
 
 ;  Here with 0x472
-;
-; XXX - I don't see how we can get away with setting "sam" to 0
-;  since it is the base address for stuff that is coming our way.
 
-ffff31b4:	f9003a7f 	str	xzr, [x19, #0x70]	; sam = 0
+; We set "sam" = 0, so a 0x472 entry must get loaded to RAM !!
+; Therefore, a prior 0x471 entry (call it a plugin) must
+; have run and set up ram !!
+;
+; This had me entirely perplexed at first (and it was a study of rkflashtool
+;  that made things clear).  The 0x471 entries get loaded (and run) first.
+; And in the case I studied the 0x471 entry was "rk3399_ddr_800MHz_v"
+;  which looks suspiciously like something that will set up DDR RAM.
+; It is important to understand that a 0x471 entry (as well as a 0x472)
+;  can run, then return, allowing these things to get chained.
+
+ffff31b4:	f9003a7f 	str	xzr, [x19, #0x70]	; sam = 0  (in DDR ram!)
 ffff31b8:	14000018 	b	0xffff3218
 
 ; --------------------------------------------------------------------------------------
@@ -5236,9 +5244,11 @@ ffff3208:	540000c1 	b.ne	0xffff3220
 
 ; --------------------------------------------------------------------------------------
 ;  Here with 0x471
+;
+; now we are setting "sam" to SRAM + 0x2000
 ffff320c:	f0ffc662 	adrp	x2, 0xff8c2000		; SRAM
 ffff3210:	91000042 	add	x2, x2, #0x0		; x2 += 0  --  silly
-ffff3214:	f9003a62 	str	x2, [x19, #0x70]	; sam = SRAM
+ffff3214:	f9003a62 	str	x2, [x19, #0x70]	; sam = SRAM + 0x2000
 
 ffff3218:	321b0000 	orr	w0, w0, #0x20
 ffff321c:	39019660 	strb	w0, [x19, #0x65]	; lucy = w0 | 0x20
@@ -6659,9 +6669,13 @@ ffff3bc8:	d65f03c0 	ret
 
 ; this routine will (if possible) run loaded code eventually
 
+; A side note (this is in no way handled in this routine)
+; 0x471 payloads will be in SRAM at offset 0x2000 (ff8c2000)
+; 0x472 payloads will be in DDR ram at offset 0
+
 ; The value in SRAM + 12 determines whether USB is expected to be
 ; encrypted or not.  If it is 0, encryption is not required.
-; in that case (no encryption):
+; in that case (with no encryption):
 
 ; 0x471 payload - this case is simple
 ;   -- reject it if it begins with RSAK
