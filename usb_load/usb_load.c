@@ -15,6 +15,9 @@
 int usb_find_rk ( void );
 void usb_open_rk ( void );
 void usb_close_rk ( void );
+int usb_send_rk ( int, char *, int );
+
+int crc_calc ( unsigned char *, int );
 
 void
 error ( char *msg )
@@ -35,6 +38,52 @@ main ( int argc, char **argv )
 	usb_close_rk ();
 
 	return 0;
+}
+
+/* We can send either to SRAM (at ff8c2000) or DDR ram (at 0)
+ */
+int
+send_image ( unsigned char *buf, int size, int type )
+{
+	int crc;
+	int len;
+	int sent;
+	int nio;
+	int n;
+	int tail_packet;
+	char extra = 0;
+
+	if ( size & 0x1 )
+	    size++;
+
+	tail_packet = 0;
+	if ( (size % 4096) == 4096 )
+	    tail_packet = 1;
+
+	crc = crc_calc ( buf, size );
+
+	buf[size] = (crc >> 8) & 0xff;
+	buf[size+1] = crc & 0xff;
+	len = size + 2;
+
+	sent = 0;
+
+	while ( sent < len ) {
+	    nio = len - sent;
+	    if ( nio > 4096 ) nio = 4096;
+	    n = usb_send_rk ( type, buf+sent, nio );
+	    if ( n != nio )
+		return 0;
+	    sent += nio;
+	}
+
+	if ( tail_packet ) {
+	    n = usb_send_rk ( type, &extra, 1 );
+	    if ( n != 1 )
+		return 0;
+	}
+
+	return 1;
 }
 
 /* ---------------------------------- */
@@ -186,6 +235,39 @@ usb_send_rk ( int type, char *buf, int count )
 	 * our type is the "index"
 	 */
 	 return len;
+}
+
+/* Taken from rkdeveloptool */
+
+#define poly16_CCITT    0x1021          /* crc-ccitt mask */
+
+unsigned short
+CRC_Calculate(unsigned short crc, unsigned char ch)
+{
+        int i;
+
+        for ( i=0x80; i != 0; i >>= 1 ) {
+                if ( (crc & 0x8000) != 0 ) {
+                        crc <<= 1;
+                        crc ^= poly16_CCITT;
+                } else
+                        crc <<= 1;
+
+                if ( (ch & i)!=0 )
+                        crc ^= poly16_CCITT;
+        }
+        return crc;
+}
+
+int
+crc_calc ( unsigned char *buf, int len )
+{
+	unsigned short crc = 0xffff;
+
+	while ( len-- )
+	    crc = CRC_Calculate ( crc, *buf++);
+
+	return crc;
 }
 
 /* THE END */
