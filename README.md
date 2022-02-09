@@ -19,3 +19,4 @@ Here are the projects you will find here:
 * bare_hello - hello demo loaded directly by bootrom
 * bare_dump - printf and ROM dump loaded directly by bootrom
 * bootrom - analysis of the on-chip bootrom
+* usb_load - linux side tool for download to bootrom

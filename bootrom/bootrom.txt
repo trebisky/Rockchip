@@ -6686,6 +6686,8 @@ ffff3bc8:	d65f03c0 	ret
 ;   -- just launch it at the start of the payload
 
 ; if the value in SRAM + 12 is non-zero, we are expecting encryption
+; ** as near as I can tell, my chip is shipped without expecting
+;   encryption, at least that is what I see looking at rkdeveloptool
 
 ; 0x471 payload -- 
 ;   -- check for RSAK
@@ -6718,7 +6720,8 @@ ffff3bf4:	12000000 	and	w0, w0, #0x1
 ffff3bf8:	4b204054 	sub	w20, w2, w0, uxtw	; size
 
 ; Note that verify also calls uncrypt()
-; so if it succeeds we have both verified the checksum and
+; Note also that uncrypt is RC4 with the rockchip key.
+; If it succeeds we have both verified the checksum and
 ; decrypted the payload.
 ; Note that we do this for both 0x471 and 0x472
 ; *** Note also that further decryption may be done below
@@ -6959,6 +6962,12 @@ ffff3dd4:	d65f03c0 	ret
 ; =====================================================
 
 ; subroutine uncrypt ( buf, n )
+
+; This is RC4 encryption.
+; This ROM uses a precomputed block based on the following key
+; unsigned char key[16]={124,78,3,4,85,5,9,7,45,44,123,56,23,13,23,17};
+; Note that RC4 is the inverse of itself
+
 ; Called from several places
 ; -- no prolog
 ; w1 is a count (typically 0x200)
