@@ -67,8 +67,14 @@ load_image ( char *path )
 
 	close ( fd );
 
-	send_image ( buffer, n, 0x471 );
+	if ( send_image ( buffer, n, 0x471 ) )
+	    error ( "Error sending image" );
 }
+
+#define CHUNK_SIZE	4096
+// #define CHUNK_SIZE	10000	// fails
+// #define CHUNK_SIZE	8192	// fails
+// #define CHUNK_SIZE	2048	// ok
 
 /* We can send either to SRAM (at ff8c2000) or DDR ram (at 0)
  */
@@ -88,8 +94,9 @@ send_image ( unsigned char *buf, int size, int type )
 
 	rc4 ( buf, size );
 
+	/* I have no idea what this is all about */
 	tail_packet = 0;
-	if ( (size % 4096) == 4096 )
+	if ( (size % CHUNK_SIZE) == CHUNK_SIZE-2 )
 	    tail_packet = 1;
 
 	crc = crc_calc ( buf, size );
@@ -102,20 +109,23 @@ send_image ( unsigned char *buf, int size, int type )
 
 	while ( sent < len ) {
 	    nio = len - sent;
-	    if ( nio > 4096 ) nio = 4096;
+	    if ( nio > CHUNK_SIZE ) nio = CHUNK_SIZE;
 	    n = usb_send_rk ( type, buf+sent, nio );
-	    if ( n != nio )
-		return 0;
+	    // printf ( "Wrote: %d\n", n );
+	    if ( n != nio ) {
+		fprintf ( stderr, "Write error: %d\n", n );
+		return 1;
+	    }
 	    sent += nio;
 	}
 
 	if ( tail_packet ) {
 	    n = usb_send_rk ( type, &extra, 1 );
 	    if ( n != 1 )
-		return 0;
+		return 1;
 	}
 
-	return 1;
+	return 0;
 }
 
 /* ---------------------------------- */
