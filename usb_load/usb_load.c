@@ -12,12 +12,18 @@
 #include <fcntl.h>
 #include <string.h>
 
+void load_image ( char * );
+int send_image ( unsigned char *, int, int );
+
 int usb_find_rk ( void );
 void usb_open_rk ( void );
 void usb_close_rk ( void );
 int usb_send_rk ( int, char *, int );
 
 int crc_calc ( unsigned char *, int );
+void rc4 ( unsigned char*, int );
+
+#define	DDR	"ddr.img"
 
 void
 error ( char *msg )
@@ -34,10 +40,34 @@ main ( int argc, char **argv )
 	n = usb_find_rk ();
 	if ( n < 1 )
 	    error ( "Cannot find any RK3399 devices" );
+
 	usb_open_rk ();
+	load_image ( DDR );
 	usb_close_rk ();
 
 	return 0;
+}
+
+#define MAX_IMAGE_SIZE	128*1024
+
+unsigned char buffer[MAX_IMAGE_SIZE];
+
+void
+load_image ( char *path )
+{
+	int fd;
+	int n;
+
+	fd = open ( path, O_RDONLY );
+	if ( fd < 0 )
+            error ( "File open failed" );
+
+	n = read ( fd, buffer, MAX_IMAGE_SIZE );
+	printf ( "Image read: %d bytes\n", n );
+
+	close ( fd );
+
+	send_image ( buffer, n, 0x471 );
 }
 
 /* We can send either to SRAM (at ff8c2000) or DDR ram (at 0)
@@ -55,6 +85,8 @@ send_image ( unsigned char *buf, int size, int type )
 
 	if ( size & 0x1 )
 	    size++;
+
+	rc4 ( buf, size );
 
 	tail_packet = 0;
 	if ( (size % 4096) == 4096 )
@@ -269,5 +301,44 @@ crc_calc ( unsigned char *buf, int len )
 
 	return crc;
 }
+
+void
+rc4 ( unsigned char* buf, int len )
+{
+        unsigned char S[256],K[256];
+	/* Rockchip key */
+        unsigned char key[16]={124,78,3,4,85,5,9,7,45,44,123,56,23,13,23,17};
+        int i,j,t,x;
+	// unsigned char temp;
+	int temp;
+
+        j = 0;
+        for(i=0; i<256; i++){
+                S[i] = (unsigned char)i;
+                j&=0x0f;
+                K[i] = key[j];
+                j++;
+        }
+
+        j = 0;
+        for(i=0; i<256; i++){
+                j = (j + S[i] + K[i]) % 256;
+                temp = S[i];
+                S[i] = S[j];
+                S[j] = temp;
+        }
+
+        i = j = 0;
+        for(x=0; x<len; x++){
+                i = (i+1) % 256;
+                j = (j + S[i]) % 256;
+                temp = S[i];
+                S[i] = S[j];
+                S[j] = temp;
+                t = (S[i] + (S[j] % 256)) % 256;
+                buf[x] = buf[x] ^ S[t];
+        }
+}
+
 
 /* THE END */
