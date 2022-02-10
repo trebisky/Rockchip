@@ -168,7 +168,7 @@ typedef enum{
  * A key decision is whether to use a synchronous or asynchronous interface.
  *  libusb will allow either.  It would probably be better to call these
  *  blocking versus non-blocking.  I will use "synchronous" here, i.e. the
- *  simple blocking interface.  This means that the libusb_bulk_transfer()
+ *  simple blocking interface.  This means that the libusb_control_transfer()
  *  call will block, which is fine by me, at least to get started.
  *
  * Once you have opened a device, you need to "claim an interface".
@@ -307,7 +307,7 @@ crc_calc ( unsigned char *buf, int len )
 	unsigned short crc = 0xffff;
 
 	while ( len-- )
-	    crc = CRC_Calculate ( crc, *buf++);
+	    crc = CRC_Calculate ( crc, *buf++ );
 
 	return crc;
 }
@@ -319,7 +319,6 @@ rc4 ( unsigned char* buf, int len )
 	/* Rockchip key */
         unsigned char key[16]={124,78,3,4,85,5,9,7,45,44,123,56,23,13,23,17};
         int i,j,t,x;
-	// unsigned char temp;
 	int temp;
 
         j = 0;
