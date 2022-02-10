@@ -5,7 +5,7 @@
 #
 # Tom Trebisky  2-8-2022
 
-all:	usb_load
+all:	usb_load unpack
 
 CFLAGS_USB = -I/usr/include/libusb-1.0
 # CFLAGS = -g -O2
@@ -14,6 +14,9 @@ CF = $(CFLAGS_USB)
 
 usb_load:	usb_load.c
 	cc $(CF) -o usb_load usb_load.c -lusb-1.0
+
+unpack:	unpack.c
+	cc -o unpack unpack.c
 
 clean:
 	rm -f usb_load
