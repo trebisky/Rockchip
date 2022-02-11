@@ -24,6 +24,7 @@ int crc_calc ( unsigned char *, int );
 void rc4 ( unsigned char*, int );
 
 #define	DDR	"ddr.img"
+//#define	DDR	"hello_sram.bin"
 
 void
 error ( char *msg )
@@ -86,18 +87,42 @@ send_image ( unsigned char *buf, int size, int type )
 	int sent;
 	int nio;
 	int n;
-	int tail_packet;
-	char extra = 0;
+	int rem;
+	// int tail_packet;
+	// char extra = 0;
 
 	if ( size & 0x1 )
 	    size++;
 
+#ifdef notdef
+	/* Some of my executables are quite small and trying to
+	 * send a single small buffer got an error return.
+	 * (although it actually worked just fine).
+	 * This does no hard and avoids getting any error
+	 * that might frighten the users (namely me).
+	 */
+	if ( size < 4096 )
+	    size = 4096;
+#endif
+
+	/* This is my way of bypassing whatever this "tail packet"
+	 * rubbish is all about.  I just ensure that we never
+	 * send any packet that isn't 4096 bytes.  Sending padding
+	 * does no harm and certainly doesn't slow things down.
+	 * This also covers the above case.
+	 */
+	rem = size % CHUNK_SIZE;
+	if ( rem )
+	    size += (CHUNK_SIZE-rem);
+
 	rc4 ( buf, size );
 
+#ifdef notdef
 	/* I have no idea what this is all about */
 	tail_packet = 0;
 	if ( (size % CHUNK_SIZE) == CHUNK_SIZE-2 )
 	    tail_packet = 1;
+#endif
 
 	crc = crc_calc ( buf, size );
 
@@ -119,11 +144,13 @@ send_image ( unsigned char *buf, int size, int type )
 	    sent += nio;
 	}
 
+#ifdef notdef
 	if ( tail_packet ) {
 	    n = usb_send_rk ( type, &extra, 1 );
 	    if ( n != 1 )
 		return 1;
 	}
+#endif
 
 	return 0;
 }

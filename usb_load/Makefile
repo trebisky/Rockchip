@@ -18,5 +18,8 @@ usb_load:	usb_load.c
 unpack:	unpack.c
 	cc -o unpack unpack.c
 
+get1:
+	cp ../bare_hello/bare.bin ./hello_sram.bin
+
 clean:
 	rm -f usb_load
