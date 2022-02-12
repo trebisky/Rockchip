@@ -25,8 +25,16 @@ LDFLAGS		:=	-Bstatic \
 			-Wl,--build-id=none \
 			-nostdlib
 
+LD_DDR_FLAGS	:=	-Bstatic \
+			-Tbare_ddr.lds \
+			-Wl,--start-group \
+			-Wl,--end-group \
+			-Wl,--build-id=none \
+			-nostdlib
+
 CC			=	$(CROSS_COMPILE)gcc $(CFLAGS)
 LD 			=	$(CROSS_COMPILE)gcc $(LDFLAGS)
+LD_DDR 			=	$(CROSS_COMPILE)gcc $(LD_DDR_FLAGS)
 OBJCOPY			=	$(CROSS_COMPILE)objcopy
 DUMP			=	$(CROSS_COMPILE)objdump
 
@@ -45,7 +53,7 @@ DUMP			=	$(CROSS_COMPILE)objdump
 
 # -------------------------------------
 
-all: install
+all: install bare_ddr.bin
 #all: $(TARGET)
 
 install: $(TARGET)
@@ -67,8 +75,16 @@ $(BOARD).elf: $(OBJS)
 	@echo " [LD]   $(BOARD).elf"
 	@$(LD) $(OBJS) -o $(BOARD).elf
 
+bare_ddr.elf:	$(OBJS)
+	@echo " [LD]   bare_ddr.elf"
+	@$(LD_DDR) $(OBJS) -o bare_ddr.elf
+
+bare_ddr.bin: bare_ddr.elf
+	@echo " [IMG]  bare_ddr.bin"
+	@$(OBJCOPY) -O binary bare_ddr.elf bare_ddr.bin
+
 $(TARGET): $(BOARD).elf
-	@#echo " [IMG]  $(TARGET)
+	@echo " [IMG]  $(TARGET)"
 	@$(OBJCOPY) -O binary $(BOARD).elf $(TARGET)
 
 dis: $(BOARD).elf

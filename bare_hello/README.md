@@ -4,6 +4,11 @@ It is truly bare metal, because it does not rely on U-boot to get
 loaded (via network tftp).  This gets placed onto an SD card and
 gets started directly by the bootrom.
 
+I have subsequently learned how to download files of this sort to
+the board via a USB cable (see usb_load).  You can build
+bare_ddr.bin which is intended to run in DDR ram at address 0,
+after usb_load has downloaded the ddr tool to SRAM.
+
 Now that I have the bare_blink demo to work, I would like to emit
 messages via the console uart.  This was easy when I was being
 loaded from U-Boot because the uart initialization had already

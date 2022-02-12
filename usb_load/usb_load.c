@@ -4,6 +4,10 @@
  *
  * Use a USB connection to the RK3399 to
  * talk to the bootrom and load and run an image.
+ *
+ * usb_load with no arguments -  scans USB for the rockchip and exits
+ * usb_load -d - will download the DDR loader to sram
+ * usb_load path - will download your gadget to sram
  */
 
 #include <stdio.h>
@@ -12,7 +16,9 @@
 #include <fcntl.h>
 #include <string.h>
 
-void load_image ( char * );
+void load_image_sram ( char * );
+void load_image_ddr ( char * );
+void load_image ( char *, int );
 int send_image ( unsigned char *, int, int );
 
 int usb_find_rk ( void );
@@ -24,7 +30,12 @@ int crc_calc ( unsigned char *, int );
 void rc4 ( unsigned char*, int );
 
 #define	DDR	"ddr.img"
-//#define	DDR	"hello_sram.bin"
+
+/* Notes --
+ *
+ * Trying to "chain" two things to SRAM just gets the message "Soft reset" on
+ *  the second load (at least when the first was our ddr.img.
+ */
 
 void
 error ( char *msg )
@@ -37,13 +48,38 @@ int
 main ( int argc, char **argv )
 {
 	int n;
+	char *path = NULL;
+	int ddr_load = 0;
+
+	argc--;
+	argv++;
+
+	while ( argc-- ) {
+	    if ( argv[0][0] == '-' ) {
+		ddr_load = 1;
+	    } else {
+		path = argv[0];
+	    }
+	    argv++;
+	}
 
 	n = usb_find_rk ();
 	if ( n < 1 )
 	    error ( "Cannot find any RK3399 devices" );
 
 	usb_open_rk ();
-	load_image ( DDR );
+
+	if ( ddr_load )
+	    load_image_sram ( DDR );
+
+	if ( ddr_load && path )
+	    sleep ( 2.0 );
+
+	if ( path )
+	    printf ( "path: %s\n", path );
+	if ( path )
+	    load_image_ddr ( path );
+
 	usb_close_rk ();
 
 	return 0;
@@ -54,7 +90,7 @@ main ( int argc, char **argv )
 unsigned char buffer[MAX_IMAGE_SIZE];
 
 void
-load_image ( char *path )
+load_image ( char *path, int type )
 {
 	int fd;
 	int n;
@@ -68,8 +104,20 @@ load_image ( char *path )
 
 	close ( fd );
 
-	if ( send_image ( buffer, n, 0x471 ) )
+	if ( send_image ( buffer, n, type ) )
 	    error ( "Error sending image" );
+}
+
+void
+load_image_sram ( char *path )
+{
+	load_image ( path, 0x471 );
+}
+
+void
+load_image_ddr ( char *path )
+{
+	load_image ( path, 0x472 );
 }
 
 #define CHUNK_SIZE	4096
@@ -136,7 +184,7 @@ send_image ( unsigned char *buf, int size, int type )
 	    nio = len - sent;
 	    if ( nio > CHUNK_SIZE ) nio = CHUNK_SIZE;
 	    n = usb_send_rk ( type, buf+sent, nio );
-	    // printf ( "Wrote: %d\n", n );
+	    printf ( "Wrote (0x%x): %d\n", type, n );
 	    if ( n != nio ) {
 		fprintf ( stderr, "Write error: %d\n", n );
 		return 1;

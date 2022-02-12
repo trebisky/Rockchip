@@ -2524,7 +2524,7 @@ ffff1a58:	97fffbf6 	bl	0xffff0a30		; xxdelay(1)
 ffff1a5c:	b94007e0 	ldr	w0, [sp, #4]		; w0 = x
 ffff1a60:	90000021 	adrp	x1, 0xffff5000
 
-ffff1a64:	b9406821 	ldr	w1, [x1, #0x68]		; w1 = bob
+ffff1a64:	b9406821 	ldr	w1, [x1, #0x68]		; w1 = load_count
 ffff1a68:	11000402 	add	w2, w0, #0x1
 ffff1a6c:	b90007e2 	str	w2, [sp, #4]
 ffff1a70:	6b21401f 	cmp	w0, w1, uxtw
@@ -4320,10 +4320,10 @@ ffff2c44:	39401000 	ldrb	w0, [x0, #4]
 ffff2c48:	2a012000 	orr	w0, w0, w1, lsl #8	; 16 bit value from 4/5
 
 ; come here if not 0x472 (hence this must be 0x471)
-ffff2c4c:	f9403a61 	ldr	x1, [x19, #0x70]	; sam
-ffff2c50:	b9406a62 	ldr	w2, [x19, #0x68]	; bob
+ffff2c4c:	f9403a61 	ldr	x1, [x19, #0x70]	; load_base
+ffff2c50:	b9406a62 	ldr	w2, [x19, #0x68]	; load_count
 
-ffff2c54:	940003de 	bl	0xffff3bcc		; usb_try_run ( val-4/5, sam, bob)
+ffff2c54:	940003de 	bl	0xffff3bcc		; usb_try_run ( val-4/5, load_base, load_count)
 
 ffff2c58:	39419660 	ldrb	w0, [x19, #0x65]	; lucy
 ffff2c5c:	52801be1 	mov	w1, #0xdf
@@ -4423,7 +4423,7 @@ ffff2cfc:	f9400666 	ldr	x6, [x19, #8]		; sram-K
 
 ffff2d00:	53017c56 	lsr	w22, w2, #1
 
-ffff2d04:	b9406a65 	ldr	w5, [x19, #0x68]	; w5 = bob (a count)
+ffff2d04:	b9406a65 	ldr	w5, [x19, #0x68]	; w5 = load_count
 ffff2d08:	394024c1 	ldrb	w1, [x6, #9]		; K+9
 ffff2d0c:	394020c3 	ldrb	w3, [x6, #8]		; K+8
 ffff2d10:	2a012063 	orr	w3, w3, w1, lsl #8
@@ -4437,27 +4437,27 @@ ffff2d18:	7940da61 	ldrh	w1, [x19, #0x6c]	; "joe"
 ffff2d1c:	53011454 	ubfx	w20, w2, #1, #5		; w20 = 5:1 from event
 
 ffff2d20:	2a044063 	orr	w3, w3, w4, lsl #16	; 24 bit value from K
-ffff2d24:	53007ca2 	lsr	w2, w5, #0		; w2 = w5 = bob
+ffff2d24:	53007ca2 	lsr	w2, w5, #0		; w2 = w5 = load_count
 ffff2d28:	36080780 	tbz	w0, #1, 0xffff2e18
 
 ffff2d2c:	f9400aa0 	ldr	x0, [x21, #16]		; X + 16
 ffff2d30:	39401404 	ldrb	w4, [x0, #5]
 ffff2d34:	39401007 	ldrb	w7, [x0, #4]
 
-ffff2d38:	f9403a60 	ldr	x0, [x19, #0x70]	; x0 = sam (addr in SRAM)
+ffff2d38:	f9403a60 	ldr	x0, [x19, #0x70]	; x0 = load_base (addr in SRAM)
 ffff2d3c:	2a0420e4 	orr	w4, w7, w4, lsl #8	; 16 bit value
 
 ffff2d40:	7101043f 	cmp	w1, #0x41		; test "joe"
 ffff2d44:	540006e3 	b.cc	0xffff2e20
 
-; start this with w5 = the old "bob"
-; this yields a new "bob" in w3
+; start this with w5 = the old load_count
+; this yields a new "load_count" in w3
 ffff2d48:	1ac40827 	udiv	w7, w1, w4		; w7 = w1 / w4
 ffff2d4c:	1b047ce8 	mul	w8, w7, w4		; w8 = w7 * w4
 ffff2d50:	4b234107 	sub	w7, w8, w3, uxtw	; w7 = w8 - w3
 ffff2d54:	0b2540e3 	add	w3, w7, w5, uxtw	; w3 = w7 + w5
 
-ffff2d58:	b9006a63 	str	w3, [x19, #0x68]	; bob = w3
+ffff2d58:	b9006a63 	str	w3, [x19, #0x68]	; load_count = w3
 
 ffff2d5c:	394064c3 	ldrb	w3, [x6, #25]		; K+25
 ffff2d60:	394060c5 	ldrb	w5, [x6, #24]		; K+24
@@ -4606,7 +4606,7 @@ ffff2e20:	2a1f03e7 	mov	w7, wzr
 ffff2e24:	2a1f03e8 	mov	w8, wzr
 
 ; "D" comes here
-; x0 = "sam", x2 = "bob"
+; x0 = "load_base", x2 = "load_count"
 ffff2e28:	8b020000 	add	x0, x0, x2		; x0 += x2
 ffff2e2c:	4b284022 	sub	w2, w1, w8, uxtw	; w2 = w1 - w8
 ffff2e30:	0b224082 	add	w2, w4, w2, uxtw	; w2 += w4
@@ -4625,9 +4625,9 @@ ffff2e50:	1a823097 	csel	w23, w4, w2, cc
 ffff2e54:	53007ee2 	lsr	w2, w23, #0		; w2 = w23
 ffff2e58:	9400057e 	bl	0xffff4450		; memcpy
 
-ffff2e5c:	b9406a65 	ldr	w5, [x19, #0x68]	; bob
-ffff2e60:	0b2542e0 	add	w0, w23, w5, uxtw	; bob += w23
-ffff2e64:	b9006a60 	str	w0, [x19, #0x68]	; bob
+ffff2e5c:	b9406a65 	ldr	w5, [x19, #0x68]	; load_count
+ffff2e60:	0b2542e0 	add	w0, w23, w5, uxtw	; load_count += w23
+ffff2e64:	b9006a60 	str	w0, [x19, #0x68]	; load_count
 
 ffff2e68:	36000096 	tbz	w22, #0, 0xffff2e78
 
@@ -5178,7 +5178,7 @@ ffff3190:	6a02001f 	tst	w0, w2
 ffff3194:	1a9f07e2 	cset	w2, ne
 ffff3198:	37000442 	tbnz	w2, #0, 0xffff3220
 
-ffff319c:	b9006a7f 	str	wzr, [x19, #0x68]	; bob = 0
+ffff319c:	b9006a7f 	str	wzr, [x19, #0x68]	; load_count = 0
 
 ffff31a0:	39401422 	ldrb	w2, [x1, #5]		; get index from bytes 4/5
 ffff31a4:	39401024 	ldrb	w4, [x1, #4]
@@ -5189,7 +5189,7 @@ ffff31b0:	540002a1 	b.ne	0xffff3204
 
 ;  Here with 0x472
 
-; We set "sam" = 0, so a 0x472 entry must get loaded to RAM !!
+; We set "load_base" = 0, so a 0x472 entry must get loaded to RAM !!
 ; Therefore, a prior 0x471 entry (call it a plugin) must
 ; have run and set up ram !!
 ;
@@ -5200,7 +5200,7 @@ ffff31b0:	540002a1 	b.ne	0xffff3204
 ; It is important to understand that a 0x471 entry (as well as a 0x472)
 ;  can run, then return, allowing these things to get chained.
 
-ffff31b4:	f9003a7f 	str	xzr, [x19, #0x70]	; sam = 0  (in DDR ram!)
+ffff31b4:	f9003a7f 	str	xzr, [x19, #0x70]	; load_base = 0  (in DDR ram!)
 ffff31b8:	14000018 	b	0xffff3218
 
 ; --------------------------------------------------------------------------------------
@@ -5245,10 +5245,10 @@ ffff3208:	540000c1 	b.ne	0xffff3220
 ; --------------------------------------------------------------------------------------
 ;  Here with 0x471
 ;
-; now we are setting "sam" to SRAM + 0x2000
+; now we are setting "load_base" to SRAM + 0x2000
 ffff320c:	f0ffc662 	adrp	x2, 0xff8c2000		; SRAM
 ffff3210:	91000042 	add	x2, x2, #0x0		; x2 += 0  --  silly
-ffff3214:	f9003a62 	str	x2, [x19, #0x70]	; sam = SRAM + 0x2000
+ffff3214:	f9003a62 	str	x2, [x19, #0x70]	; load_base = SRAM + 0x2000
 
 ffff3218:	321b0000 	orr	w0, w0, #0x20
 ffff321c:	39019660 	strb	w0, [x19, #0x65]	; lucy = w0 | 0x20
@@ -5340,10 +5340,11 @@ ffff32e4:	14000015 	b	0xffff3338
 ffff32e8:	7101069f 	cmp	w20, #0x41
 ffff32ec:	540002a3 	b.cc	0xffff3340
 
-; bob is a count, sam is an address (0 or SRAM+0)
-ffff32f0:	f9403a60 	ldr	x0, [x19, #0x70]	; x0 = sam
+; load_base is an address (0 or SRAM+0)
+; load_count is how much has accumulated there so far
+ffff32f0:	f9403a60 	ldr	x0, [x19, #0x70]	; x0 = load_base
 
-ffff32f4:	b9406a61 	ldr	w1, [x19, #0x68]	; w1 = bob
+ffff32f4:	b9406a61 	ldr	w1, [x19, #0x68]	; w1 = load_count
 
 ffff32f8:	1ad70a82 	udiv	w2, w20, w23
 ffff32fc:	1b177c56 	mul	w22, w2, w23
@@ -5361,7 +5362,7 @@ ffff32fc:	1b177c56 	mul	w22, w2, w23
 ; usb_start_transfer ( "usb", ep-index, buf, size, ctrl, flag )
 ; usb_start_transfer ( "usb", 0, buf, x22, 0x50, 1 )
 
-ffff3300:	8b000022 	add	x2, x1, x0	; buf = sam + bob
+ffff3300:	8b000022 	add	x2, x1, x0	; buf = load_base + load_count
 ffff3304:	52800a04 	mov	w4, #0x50	; ctrl
 ffff3308:	52800025 	mov	w5, #0x1	; flag
 ffff330c:	aa1303e0 	mov	x0, x19		; "usb"
@@ -5374,9 +5375,9 @@ ffff331c:	1400000a 	b	0xffff3344
 
 ; -------------------
 ; from above
-ffff3320:	f9403a60 	ldr	x0, [x19, #0x70]	; sam
-ffff3324:	b9406a61 	ldr	w1, [x19, #0x68]	; bob
-ffff3328:	8b000022 	add	x2, x1, x0		; "buf" = sam + bob
+ffff3320:	f9403a60 	ldr	x0, [x19, #0x70]	; load_base
+ffff3324:	b9406a61 	ldr	w1, [x19, #0x68]	; load_count
+ffff3328:	8b000022 	add	x2, x1, x0		; "buf" = load_base + load_count
 
 ffff332c:	52800a04 	mov	w4, #0x50	; ctrl
 ffff3330:	aa1303e0 	mov	x0, x19		; "usb"
