@@ -18,9 +18,9 @@ who knows what else.  These typically contain 4 "entries" with the first being a
 DDR loader, intended to run in SRAM, the second a fancier usb loader intended to
 run in DDR ram, followed by a couple of other things (the first of which is yet
 another loader) intended to be installed onto SD or eMMC.  Such a composite file
-begins with the letters "BOOT" and has a header, followed by as many "entry headers",
+begins with the characters "BOOT". The file has an overall header,
+which includes those "BOOT" characters, followed by several "entry headers",
 followed by the entries themselves (which are RC4 encrypted in the file).
 This is hardly a convenient package for anything I care to do, hence this tool.
 
 Tom Trebisky  2-11-2022
-

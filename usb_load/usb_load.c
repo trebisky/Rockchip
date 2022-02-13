@@ -72,11 +72,12 @@ main ( int argc, char **argv )
 	if ( ddr_load )
 	    load_image_sram ( DDR );
 
+	/* A second is really too long, but we do
+	 * need some delay.
+	 */
 	if ( ddr_load && path )
-	    sleep ( 2.0 );
+	    sleep ( 1.0 );
 
-	if ( path )
-	    printf ( "path: %s\n", path );
 	if ( path )
 	    load_image_ddr ( path );
 
@@ -101,6 +102,12 @@ load_image ( char *path, int type )
 
 	n = read ( fd, buffer, MAX_IMAGE_SIZE );
 	printf ( "Image read: %d bytes\n", n );
+
+	/* We probably read the first part of an image
+	 * that is bigger than our buffer.
+	 */
+	if ( n == MAX_IMAGE_SIZE )
+	    error ( "Image too big" );
 
 	close ( fd );
 
@@ -139,14 +146,17 @@ send_image ( unsigned char *buf, int size, int type )
 	// int tail_packet;
 	// char extra = 0;
 
+#ifdef notdef
+	/* This is unnecessary given our rounding up to
+	 * full multiples of CHUNK_SIZE below.
+	 */
 	if ( size & 0x1 )
 	    size++;
 
-#ifdef notdef
 	/* Some of my executables are quite small and trying to
 	 * send a single small buffer got an error return.
 	 * (although it actually worked just fine).
-	 * This does no hard and avoids getting any error
+	 * This does no harm and avoids getting any error
 	 * that might frighten the users (namely me).
 	 */
 	if ( size < 4096 )
@@ -159,7 +169,7 @@ send_image ( unsigned char *buf, int size, int type )
 	 * does no harm and certainly doesn't slow things down.
 	 * This also covers the above case.
 	 */
-	rem = size % CHUNK_SIZE;
+	rem = (size) % CHUNK_SIZE;
 	if ( rem )
 	    size += (CHUNK_SIZE-rem);
 
@@ -174,9 +184,24 @@ send_image ( unsigned char *buf, int size, int type )
 
 	crc = crc_calc ( buf, size );
 
+	/* Given the rounding above, this will always be sent
+	 * as a final 2 byte write.
+	 *
+	 * I tried inluding it in the last tidy CHUNK_SIZE
+	 * packet, but this actually causes the download
+	 * to fail (which is what the old tail_packet
+	 * logic was designed to avoid.) Doing this works fine
+	 * and seems to handle all the cases.
+	 *
+	 * Here is what I have concluded about this and the "tail_packet"
+	 * business.  It could be a firmware bug, but more likely I think
+	 * is that the bootrom just thinks there is more coming as long
+	 * as we keep sending full CHUNKs.  A partial chunk is needed to
+	 * tell it the end has arrived.
+	 */
 	buf[size] = (crc >> 8) & 0xff;
 	buf[size+1] = crc & 0xff;
-	len = size + 2;
+	len = size +2;
 
 	sent = 0;
 
@@ -184,12 +209,12 @@ send_image ( unsigned char *buf, int size, int type )
 	    nio = len - sent;
 	    if ( nio > CHUNK_SIZE ) nio = CHUNK_SIZE;
 	    n = usb_send_rk ( type, buf+sent, nio );
-	    printf ( "Wrote (0x%x): %d\n", type, n );
 	    if ( n != nio ) {
 		fprintf ( stderr, "Write error: %d\n", n );
 		return 1;
 	    }
-	    sent += nio;
+	    sent += n;
+	    // printf ( "Wrote (0x%x): %d --> %d\n", type, n, sent );
 	}
 
 #ifdef notdef
