@@ -76,9 +76,11 @@ main ( void )
 {
 	uart_init ();
 	gpio_init ();
-	gic_init ();
 
+	printf ( "\n" );
 	printf ( "Inter demo for RK3399  1-3-2022\n" );
+
+	gic_init ();
 
 	/* This will check the stack address */
 	show_stack ( 1 );
