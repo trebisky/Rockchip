@@ -46,8 +46,8 @@ LOAD			=	tools/loader -h64
 	@echo " [CC]   $<"
 	@$(CC) $< -c -o $@
 
-rock.dump:
-	$(DUMP) rock.elf rock.dump
+#rock.dump:
+#	$(DUMP) rock.elf rock.dump
 
 # -------------------------------------
 

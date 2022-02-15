@@ -15,6 +15,7 @@
 #include <stdlib.h>
 #include <fcntl.h>
 #include <string.h>
+#include <time.h>
 
 void load_image_sram ( char * );
 void load_image_ddr ( char * );
@@ -42,6 +43,17 @@ error ( char *msg )
 {
 	fprintf ( stderr, "%s\n", msg );
 	exit ( 1 );
+}
+
+void
+msleep ( int msec )
+{
+	struct timespec ts;
+
+	ts.tv_sec = 0;
+	ts.tv_nsec = msec * 1000 * 1000;
+
+	nanosleep ( &ts, NULL );
 }
 
 int 
@@ -76,7 +88,7 @@ main ( int argc, char **argv )
 	 * need some delay.
 	 */
 	if ( ddr_load && path )
-	    sleep ( 1.0 );
+	    msleep ( 200 );
 
 	if ( path )
 	    load_image_ddr ( path );
@@ -128,8 +140,14 @@ load_image_ddr ( char *path )
 }
 
 #define CHUNK_SIZE	4096
-// #define CHUNK_SIZE	10000	// fails
-// #define CHUNK_SIZE	8192	// fails
+// #define CHUNK_SIZE	128	// fails
+// #define CHUNK_SIZE	256	// fails
+// #define CHUNK_SIZE	1024	// fails
+// #define CHUNK_SIZE	4000	// fails
+// #define CHUNK_SIZE	4200	// write error
+
+// #define CHUNK_SIZE	10000	// write error
+// #define CHUNK_SIZE	8192	// write error
 // #define CHUNK_SIZE	2048	// ok
 
 /* We can send either to SRAM (at ff8c2000) or DDR ram (at 0)
@@ -214,7 +232,7 @@ send_image ( unsigned char *buf, int size, int type )
 		return 1;
 	    }
 	    sent += n;
-	    // printf ( "Wrote (0x%x): %d --> %d\n", type, n, sent );
+	    printf ( "Wrote (0x%x): %d --> %d\n", type, n, sent );
 	}
 
 #ifdef notdef
