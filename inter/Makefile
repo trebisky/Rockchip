@@ -8,7 +8,7 @@ CROSS_COMPILE = aarch64-linux-gnu-
 
 # -------------------------------------
 
-OBJS = start.o prf.o uart.o gpio.o gic.o mmu.o main.o
+OBJS = start.o prf.o uart.o gpio.o gic500.o mmu.o main.o
 
 TARGET = $(BOARD).bin
 
@@ -56,6 +56,8 @@ all: install
 
 install: $(TARGET)
 	cp $(TARGET) /var/lib/tftpboot
+
+gic500.o: gic500.c rk3399_ints.h
 
 
 $(BOARD).elf: $(OBJS)
