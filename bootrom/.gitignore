@@ -1,6 +1,7 @@
-*.bin
-*.dis
-*.elf
+bootrom*.bin
+bootrom*.dis
+bootrom*.elf
+rk3328.elf
 arm_wrap
 dumpcon
 *.bak1
