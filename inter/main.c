@@ -71,6 +71,21 @@ check_shift(void)
 	printf ( "Shift result: %h\n", y );
 }
 
+/* These only go inline with gcc -O of some kind */
+static inline void
+INT_unlock ( void )
+{
+        asm volatile("msr DAIFClr, #3" : : : "cc");
+}
+
+static inline void
+INT_lock ( void )
+{
+        asm volatile("msr DAIFSet, #3" : : : "cc");
+}
+
+
+
 void
 main ( void )
 {
@@ -81,6 +96,9 @@ main ( void )
 	printf ( "Inter demo for RK3399  1-3-2022\n" );
 
 	gic_init ();
+	timer_init ();
+
+	INT_unlock ();
 
 	/* This will check the stack address */
 	show_stack ( 1 );
@@ -108,6 +126,11 @@ main ( void )
 	// running at EL3.
 	printf ( "Current EL: %h\n", get_el() );
 	check_shift ();
+
+	for ( ;; ) {
+	    // timer_show ();
+	    delay ();
+	}
 
 	printf ( "Blinking ...\n" );
 	/* This will run the blink demo */

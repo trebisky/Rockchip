@@ -37,6 +37,7 @@
 
 typedef volatile unsigned int vu32;
 typedef unsigned int u32;
+typedef unsigned long u64;
 
 #define BIT(x)	(1<<(x))
 
@@ -73,6 +74,31 @@ void gic_show ( void );
 #define NUM_PRIO	128
 // #define NUM_MASK	5
 #define NUM_MASK	16
+
+/* How many config registers?
+ * 64 they say for v4 with 2 bits per int.
+ ( so 64 * 16 = 1024 sources !! )
+ */
+
+struct gic400_redist {
+	vu32 ctrl;			/* 0x00 */
+	vu32 iidr;			/* 0x04 */
+	vu32 typer;			/* 0x08 */
+	int __pad0;
+	vu32 statusr;			/* 0x10 */
+	vu32 waker;			/* 0x14 */
+	vu32 mpamidr;			/* 0x18 */
+	vu32 partidr;			/* 0x1c */
+	int __pad1[8];
+	vu32 setlpir;			/* 0x40 */
+	int __pad2;
+	vu32 clrlpir;			/* 0x48 */
+	int __pad3[10];
+	vu32 propbaser;			/* 0x70 */
+	int __pad4;
+	vu32 pendbaser;			/* 0x78 */
+	/* And more */
+};
 
 struct gic400_dist {
 	vu32 ctrl;			/* 0x00 */
@@ -321,7 +347,7 @@ gic_init ( void )
 }
 
 static void
-hex_show ( char *msg, u32 val )
+hex_show ( char *msg, u64 val )
 {
 	// printf ( "%s = %08x\n", msg, val );
 	printf ( "%s = %h\n", msg, val );
@@ -337,7 +363,7 @@ gic_show ( void )
 	// printf ( "int is %d bytes\n", sizeof(int) );
 
 	// printf ( "GIC sgi at = %08x\n", &gp->sgi );
-	hex_show ( "GIC sgi at", (u32) &gp->sgi );
+	hex_show ( "GIC sgi at", (u64) &gp->sgi );
 
 	/*
 	printf ( "GIC t0 at = %08x\n", &gp->target[0] );
@@ -346,7 +372,7 @@ gic_show ( void )
 	*/
 
 	// printf ( "GIC dir at = %08x\n", &cp->dir );
-	hex_show ( "GIC dir at", (u32) &cp->dir );
+	hex_show ( "GIC dir at", (u64) &cp->dir );
 
 	// printf ( "GIC type  = %08x\n", gp->type );
 	// printf ( "GIC type2 = %08x\n", gp->type2 );

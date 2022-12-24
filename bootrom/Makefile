@@ -16,7 +16,7 @@ MACH = -maarch64
 #  and be really upset when you overwrite
 #  all your work.  You have been warned
 
-all:	arm_wrap dumpcon bootrom.dis
+all:	arm_wrap dumpcon bootrom.dis rk3328.dis
 
 arm_wrap:	arm_wrap.c
 	cc -o arm_wrap arm_wrap.c
@@ -49,10 +49,20 @@ bootrom.elf:    arm_wrap bootrom.bin
 bootrom.bin:    rom.txt
 	./tobin
 
+get28:
+	cp ../../RK3328_Uboot_SPI/bootrom.rk3328.bin rk3328.bin
+
+rk3328.elf:    rk3328.bin
+	arm_wrap -bffff0000 rk3328.bin rk3328.elf
+
+
+rk3328.dis: rk3328.elf
+	$(DUMP) $(MACH) -d rk3328.elf -z >rk3328.dis
+
 clean:
 	rm -f arm_wrap
 	rm -f naive.dis
-	rm -f bootrom.elf
-	rm -f bootrom.dis
-	rm -f bootrom.bin
+	rm -f *.elf
+	rm -f *.dis
+#	rm -f bootrom.bin
 

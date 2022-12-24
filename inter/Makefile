@@ -8,7 +8,7 @@ CROSS_COMPILE = aarch64-linux-gnu-
 
 # -------------------------------------
 
-OBJS = start.o prf.o uart.o gpio.o gic500.o mmu.o main.o
+OBJS = start.o prf.o uart.o gpio.o timer.o gic500.o trap.o mmu.o main.o
 
 TARGET = $(BOARD).bin
 
@@ -59,7 +59,6 @@ install: $(TARGET)
 
 gic500.o: gic500.c rk3399_ints.h
 
-
 $(BOARD).elf: $(OBJS)
 	@echo " [LD]   $(BOARD).elf"
 	@$(LD) $(OBJS) -o $(BOARD).elf
@@ -73,6 +72,10 @@ dis: $(BOARD).elf
 
 fetch:
 	cp ../USB_loader/loader tools
+
+borrow::
+	cp /u1/Projects/Fire3/Github/Timer/trap.c .
+	cp /u1/Projects/Fire3/Github/Timer/start.S .
 
 # -------------------
 # You will need to be root for either of these to work.
