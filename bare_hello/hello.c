@@ -35,7 +35,7 @@ struct rock_gpio {
 	vu32		dir;
 	u32		_pad0[2];
 
-	u32		_pad1[32];
+	u32		_pad1[8];
 
 	vu32		ie;		/* 0x30 */
 	vu32		im;		/* 0x34 */
