@@ -6,9 +6,11 @@ with the least amount of code possible!
 
 Tom Trebisky  12-31-2021
 
-This program prints "hello" endlessly on the serial port.
+This program prints "hello" 500 times on the serial port.
 
 The starting point for this was my Bitcoin Miner (EBAZ4205)
 archive, project "fish".
 
 This was derived from my Orange Pi Github archive, project "h5_hello".
+
+working fine 12-6-2025

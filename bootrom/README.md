@@ -17,7 +17,3 @@ It was last used in my Fire3 project and was copied from
 there to here, then adjusted as necessary.
 
 Tom Trebisky  1-20-2022
-
-On December 20, 2022 I got an email from Marcin Wozniak telling me he had
-extracted the bootrom image for the RK3328.  This is now included here,
-along with the raw (and not yet annotated) disassembly.

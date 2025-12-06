@@ -42,10 +42,10 @@ reset:
 GetCPUID:
         mrs     x1, MPIDR_EL1
         and     x0, x1, #0x3
-	tst     x1, 0xff00
-	beq     1f
-	orr     x0, x0, 4
-1:	ret
+		tst     x1, 0xff00
+		beq     1f
+		orr     x0, x0, 4
+1:		ret
 
 // unsigned int GetCurrentSMode(void);
 .global GetCurrentSMode
@@ -136,8 +136,34 @@ remap_vectors:
         .text
         .align 11
 vectors_el2:
-	panic /* 0x000 Current EL w/ SP0 - Synchronous Thread */
-	panic /* 0x080 Current EL w/ SP0 - IRQ Thread */
+		panic /* 0x000 Current EL w/ SP0 - Synchronous Thread */
+
+	/* 0x100 Current EL w/ SP0 - IRQ */
+	 .align  7       /* IRQ */
+    stp x0, x1, [sp, #-16]!
+    stp x2, x3, [sp, #-16]!
+    stp x4, x5, [sp, #-16]!
+    stp x6, x7, [sp, #-16]!
+    stp x8, x9, [sp, #-16]!
+    stp x10, x11, [sp, #-16]!
+    stp x12, x13, [sp, #-16]!
+    stp x14, x15, [sp, #-16]!
+    stp x16, x17, [sp, #-16]!
+    stp x18, x30, [sp, #-16]!
+    bl handle_int
+    ldp x18, x30, [sp], #16
+    ldp x16, x17, [sp], #16
+    ldp x14, x15, [sp], #16
+    ldp x12, x13, [sp], #16
+    ldp x10, x11, [sp], #16
+    ldp x8, x9, [sp], #16
+    ldp x6, x7, [sp], #16
+    ldp x4, x5, [sp], #16
+    ldp x2, x3, [sp], #16
+    ldp x0, x1, [sp], #16
+    eret
+
+
         panic /* 0x100 Current EL w/ SP0 - FIQ Thread */
         panic /* 0x180 Current EL w/ SP0 - Error Thread */
 
@@ -147,14 +173,14 @@ vectors_el2:
         panic /* 0x380 Current EL w/ SPx - Error Handler */
 
         panic /* 0x400 Lower EL 64 bit - Synch */
-	panic /* 0x480 Lower EL 64 bit - IRQ */
-	panic /* 0x500 Lower EL 64 bit - FIQ */
-	panic /* 0x580 Lower EL 64 bit - Error */
+		panic /* 0x480 Lower EL 64 bit - IRQ */
+		panic /* 0x500 Lower EL 64 bit - FIQ */
+		panic /* 0x580 Lower EL 64 bit - Error */
 
-	panic /* 0x600 Lower EL 32 bit - Synch */
-	panic /* 0x680 Lower EL 32 bit - IRQ */
-	panic /* 0x700 Lower EL 32 bit - FIQ */
-	panic /* 0x780 Lower EL 32 bit - Error */
+		panic /* 0x600 Lower EL 32 bit - Synch */
+		panic /* 0x680 Lower EL 32 bit - IRQ */
+		panic /* 0x700 Lower EL 32 bit - FIQ */
+		panic /* 0x780 Lower EL 32 bit - Error */
 
 
 // THE END

@@ -20,10 +20,10 @@ main ( void )
 
 	if ( ! limit ) {
 	    for ( ;; )
-		puts ( "hello " );
+		puts ( "bullfrog " );
 	} else {
 	    for ( ;limit--; )
-		puts ( "hello " );
+		puts ( "bullfrog " );
 	}
 
 	/* NOTREACHED */

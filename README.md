@@ -13,6 +13,10 @@ Here are the projects you will find here:
 * printf - add printf to the blink demo (and more)
 * hello2 - uart driver with complete hardware initialization
 * inter - generate an interrupt
+
+These projects do interesting things without relying upon
+U-boot to load them.
+
 * make_boot - put U-Boot onto TF card
 * mkrock - make a bootable idbloader file
 * bare_blink - blink demo loaded directly by bootrom

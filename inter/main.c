@@ -1,6 +1,15 @@
-/* First bare metal program for the Rockchip RK3399
+/* A bare metal program for the Rockchip RK3399
  *
- * Tom Trebisky  12-31-2021
+ * The idea here is to get timer interrupts.
+ * It has become a trash-can collection for a
+ * variety of different experiments.
+ *
+ * I first wrote this back in 2021 and gave up on it.
+ * After learning about EL2 and EL1 interrupt routing
+ * in 11-2025 (working with the RK3328)
+ * I came back to this.
+ *
+ * Tom Trebisky  12-31-2021, 12-6-2025
  */
 
 #include "protos.h"
@@ -57,6 +66,7 @@ get_el(void)
         return val >> 2;
 }
 
+// I'm not sure what I was up to here.
 static inline void
 check_shift(void)
 {
@@ -84,7 +94,20 @@ INT_lock ( void )
         asm volatile("msr DAIFSet, #3" : : : "cc");
 }
 
+/* Here is the "fix" to get interrupts to work
+ * This was added 12-6-2025 after figuring this out
+ * working with the RK3328.
+ */
+void
+inter_fixup ( void )
+{
+		unsigned long lval;
 
+		asm volatile("mrs %0, hcr_el2" : "=r" (lval) : : "cc");
+		/* XXX XXX -- grab FMO, IMO */
+        lval |= 0x18;
+        asm volatile("msr hcr_el2, %0" : : "r" (lval) : "cc");
+}
 
 void
 main ( void )
@@ -95,7 +118,13 @@ main ( void )
 	printf ( "\n" );
 	printf ( "Inter demo for RK3399  1-3-2022\n" );
 
+	/* Added 12-6-2025 */
+	inter_fixup ();
+
 	gic_init ();
+	// gets done (for now) in gic_init()
+	// gic_cpu_init ();
+
 	timer_init ();
 
 	INT_unlock ();
@@ -124,19 +153,30 @@ main ( void )
 	// This returns 2, which is a bit surprising,
 	// but apparently some kind of hypervisor is
 	// running at EL3.
+	// (Actually BL31 is running as a secure monitor
+	//  at EL3).
 	printf ( "Current EL: %h\n", get_el() );
-	check_shift ();
 
+	// check_shift ();
+
+#ifdef notdef
 	for ( ;; ) {
 	    // timer_show ();
 	    delay ();
 	}
+#endif
 
 	printf ( "Blinking ...\n" );
 	/* This will run the blink demo */
 	blinker ();
 
 	/* NOTREACHED */
+}
+
+void
+handle_int ( void )
+{
+	printf ( "IRQ Interrupt\n" );
 }
 
 /* THE END */

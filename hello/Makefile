@@ -23,7 +23,9 @@ LDFLAGS		:=	-Bstatic \
 			-Wl,--start-group \
 			-Wl,--end-group \
 			-Wl,--build-id=none \
-			-nostdlib
+			-nostdlib \
+			-Wl,--no-warn-rwx-segments
+
 
 CC			=	$(CROSS_COMPILE)gcc $(CFLAGS)
 LD 			=	$(CROSS_COMPILE)gcc $(LDFLAGS)

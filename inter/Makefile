@@ -1,4 +1,4 @@
-# Makefile for Rockchip RK3399 first hello demo
+# Makefile for Rockchip RK3399 inter demo
 # Adaped from my h5 and Zynq projects
 # Tom Trebisky  1-1-2022 (Happy New Year!)
 # tom@mmto.org
@@ -25,6 +25,11 @@ LDFLAGS		:=	-Bstatic \
 			-Wl,--end-group \
 			-Wl,--build-id=none \
 			-nostdlib
+
+# Usually this must be added to the LDFLAGS to avoid a stupid
+# and annoying warning, but for this build it does not seem
+# to be needed.
+#			-Wl,--no-warn-rwx-segments
 
 CC			=	$(CROSS_COMPILE)gcc $(CFLAGS)
 LD 			=	$(CROSS_COMPILE)gcc $(LDFLAGS)

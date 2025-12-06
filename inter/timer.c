@@ -1,4 +1,4 @@
-/* Simple serial driver for the Rockchip RK3399
+/* timer driver for the Rockchip RK3399
  *
  * Tom Trebisky  1-2-2022
  */
