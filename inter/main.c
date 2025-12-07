@@ -20,6 +20,11 @@ delay ( void )
 {
         volatile int count = 100000000;
 
+		/* Adjust for when we change the CPU
+		 * from 600 to 100 Mhz.
+		 */
+		count /= 6;
+
         while ( count-- )
             ;
 }
@@ -94,6 +99,20 @@ INT_lock ( void )
         asm volatile("msr DAIFSet, #3" : : : "cc");
 }
 
+/* We enable both IRQ and FIQ
+ * IRQ = 0x1, RIQ = 0x2
+ */
+static inline void
+enable_irq ( void )
+{
+    //COMPILER_BARRIER();
+    //write_daifclr(DAIF_IRQ_BIT);
+    //isb();
+    asm volatile ("" ::: "memory");
+    asm volatile ( "msr DAIFClr, #3" : : : "cc");
+    asm volatile ( "isb" );
+}
+
 /* Here is the "fix" to get interrupts to work
  * This was added 12-6-2025 after figuring this out
  * working with the RK3328.
@@ -118,16 +137,21 @@ main ( void )
 	printf ( "\n" );
 	printf ( "Inter demo for RK3399  1-3-2022\n" );
 
+	/* Drop the CPU clock from 600 to 100 Mhz
+	 * to reduce how hot the chip gets.
+	 */
+	cpu_clock_100 ();
+
 	/* Added 12-6-2025 */
 	inter_fixup ();
 
 	gic_init ();
-	// gets done (for now) in gic_init()
-	// gic_cpu_init ();
+	gic_cpu_init ();
 
 	timer_init ();
 
-	INT_unlock ();
+	// INT_unlock ();
+	enable_irq ();
 
 	/* This will check the stack address */
 	show_stack ( 1 );
@@ -166,6 +190,8 @@ main ( void )
 	}
 #endif
 
+	pll_test ();
+
 	printf ( "Blinking ...\n" );
 	/* This will run the blink demo */
 	blinker ();
@@ -173,10 +199,34 @@ main ( void )
 	/* NOTREACHED */
 }
 
+/*
+ * -------------------
+ * Various exception handlers.
+ */
+
 void
 handle_int ( void )
 {
-	printf ( "IRQ Interrupt\n" );
+	int irq;
+
+	irq = intcon_irqwho ();
+	printf ( "IRQ Interrupt for IRQ %d\n", irq );
+
+	intcon_irqack ( irq );
+}
+
+void
+handle_bad ( int who )
+{
+    printf ( "Bad exception: %d\n", who );
+    spin ();
+}
+
+void
+handle_sync ( int a, int b )
+{
+    printf ( "Synch exception: %d %d\n", a, b );
+    // spin ();
 }
 
 /* THE END */

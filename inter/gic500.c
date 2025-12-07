@@ -7,9 +7,13 @@
  * more details.
  *
  * gic500.c - driver for the GIC500 in the Rockchip RK3399
- * taken from intcon_gic400.c for the Nanopi Fire3 (Samsung S5P6818)
+ *
+ * This code began with intcon_gic400.c for the Nanopi Fire3 (Samsung S5P6818)
+ *  (however the s5p6818 uses a gic400, so this may or may not be a wise
+ *   choice).
  *
  * The GIC500 is the interrupt controller in the Rockchip RK3399
+ *  This device is arm,gic-v3 and arm,gic-v3-its
  *
  * It is given 2 pages in the TRM (page 560-561)
  *
@@ -18,18 +22,21 @@
  * Chapter 12 is the programmers model (page 185)
  *
  * A valuable resource is:
- *  linux/arch/arm64/boot/dts/rockchip/rk3399.dtsi
- *  This device is arm,gic-v3 and arm,gic-v3-its
- *
- * After some study of the register map for the GIC-500
- * I realized that most of the D and C registers in the
- * GIC-400 were the same and I copied my driver from
- * my Fire3 project and used it as a starting point
+ *  cd /u1/linux/linux-git
+ *  arch/arm64/boot/dts/rockchip/rk3399.dtsi
+ *  This device is at arm,gic-v3 and arm,gic-v3-its
 
- * A bonus piece of information is that the
- *  enable method for all 6 cores is "psci"
+ * A peek at rk3399.dtsi yields a bonus piece of information
+ *  The *  enable method for all 6 cores is "psci" !
+ *    (this is also true for the RK3328). 
  *
- * Tom Trebisky  1-3-2022, 2-14-2022
+ * cpu_b0: cpu@100 {
+ *            device_type = "cpu";
+ *            compatible = "arm,cortex-a72";
+ *            reg = <0x0 0x100>;
+ *            enable-method = "psci";
+ *
+ * Tom Trebisky  1-3-2022, 2-14-2022, 12-6-2025
  */
 
 #include "protos.h"
@@ -41,24 +48,123 @@ typedef unsigned long u64;
 
 #define BIT(x)	(1<<(x))
 
+/* Base addresses --
+ * I learned by working with the RK3328 that you
+ *  should assume nothing when the TRM does not
+ *  provide information.
+ *
+ * I figured out the gic400 addresses for the RK3328
+ *  as follows:
+ * cd /Projects/RK3328/sources/arm-trusted-firmware
+ * rgrep GIC | grep BASE | grep rk33
+ *
+ * For the RK3328 this yields:
+ *  ./plat/rockchip/rk3328/rk3328_def.h:#define GIC400_BASE		0xff810000
+ *  ./plat/rockchip/rk3328/rk3328_def.h:#define RK3328_GICD_BASE		(GIC400_BASE + 0x1000)
+ *  ./plat/rockchip/rk3328/rk3328_def.h:#define RK3328_GICC_BASE		(GIC400_BASE + 0x2000)
+ *  ./plat/rockchip/rk3328/rk3328_def.h:#define RK3328_GICR_BASE		0	// no GICR in GIC-400
+ *
+ * The RK3399 is not so straightforward:
+ *
+ *  ./plat/rockchip/rk3399/include/shared/addressmap_shared.h:#define GIC500_BASE		(MMIO_BASE + 0x06E00000)
+ *  ./plat/rockchip/rk3399/rk3399_def.h:#define BASE_GICD_BASE			(GIC500_BASE)
+ *  ./plat/rockchip/rk3399/rk3399_def.h:#define BASE_GICR_BASE			(GIC500_BASE + SIZE_M(1))
+ *
+ * We need two other pieces of information:
+ *  ./plat/rockchip/rk3399/drivers/m0/include/addressmap.h:#define MMIO_BASE			0x40000000
+ *  ./plat/rockchip/rk3399/include/addressmap.h:#define MMIO_BASE		0xF8000000
+ *  ./plat/rockchip/rk3399/include/shared/addressmap_shared.h:#define SIZE_M(n)		((n) * 1024 * 1024)
+ *
+ * Also, if we look at the TRM we see this:
+ *   FEE0_0000 (2M region)
+ * 
+ * So f800_0000 + 06e0_0000 = fee0_0000
+ * 1024*1024 = 0010_0000
+ * And fee0_0000 + 0010_0000 = fef0_0000  (GICR_BASE)
+ *
+ * A look at plat/rockchip/rk3399/include/platform_def.h
+ *    shows us ---
+ *  #define PLAT_RK_GICD_BASE   BASE_GICD_BASE
+ *  #define PLAT_RK_GICR_BASE   BASE_GICR_BASE
+ *  #define PLAT_RK_GICC_BASE   0
+ *
+ * So, no "C" base at all -- but we get an R base.
+ * Hmmm - the GIC500 is indeed different from the GIC400.
+ */
+
 #define GIC_BASE	0xfee00000
 
-#define GICD_BASE	0xfee00000	/* 0x10000 */
-#define GICR_BASE	0xfef00000	/* 0xC0000 */
+#define GICD_BASE	0xfee00000
+#define GICR_BASE	0xfef00000
+
+/* The address map in the TRM shows
+ * a 2M window allocated for the GIC500, i.e.
+ * 0xfee00000 to 0xfeffffff
+ */
+
+/* XXX crazy experiment
+ * Which did not work.
+ */
+#define GICC_BASE	GICR_BASE
+
+#ifdef notdef
+/* At this point, I have no idea where I got these values from.
+ * Note that 3 of the areas here are outside of the 2M GIC area.
+ */
 #define GICC_BASE	0xfff00000	/* 0x10000 */
+#define GICR_BASE	0xfef00000	/* 0xC0000 */
 #define GICH_BASE	0xfff10000	/* 0x10000 */
 #define GICV_BASE	0xfff20000	/* 0x10000 */
 
 #define GITS_BASE	0xfee20000	/* 0x20000 */
+#endif
 
-/* a 2M window is allocated for the GIC500, i.e.
- * 0xfee00000 to 0xfeffffff
- * Note that 3 of the areas above are outside of this.
+/* The Rockchip RK3399 TRM gives only 2 pages to the GIC in chapter 11 (page 560).
+ * It leaves the rest to the 930 page manual for GICv3.
+ * Those pages do give some important details, as the GIC can be configured
+ * in various ways for different silicon.
+ * In the RK3399 we have:
+ *   2 clusters
+ *   cluster 0 has 4 cpu, cluster 1 has 2 cpu
+ *   4 RID bits
+ *   256 spis
+ *   And more
  */
 
+void
+gic_init ( void )
+{
+}
+
+void
+gic_cpu_init ( void )
+{
+}
+
+void
+intcon_ena ( int irq )
+{
+}
+
+void
+intcon_dis ( int irq )
+{
+}
+
+int
+intcon_irqwho ( void )
+{
+}
+
+void
+intcon_irqack ( int irq )
+{
+}
+
 // ++++++++++++++++++++++++++++++++++++++++++++++++
 // ++++++++++++++++++++++++++++++++++++++++++++++++
 
+#ifdef OLD_GIC_400
 /* Below here is code from the gic-400 */
 
 void gic_show ( void );
@@ -405,5 +511,7 @@ gic_test ( void )
 	}
 }
 #endif
+
+#endif /* OLD_GIC_400 */
 
 /* THE END */

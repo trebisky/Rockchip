@@ -3,6 +3,8 @@
  * Tom Trebisky  1-3-2022
  */
 
+void spin ();
+
 void uart_init ( void );
 void uart_puts ( char * );
 
@@ -20,8 +22,12 @@ void show_reg ( char *, int * );
 void mmu_init ( void );
 
 void gic_init ( void );
+void gic_cpu_init ( void );
 int intcon_irqwho ( void );
 void intcon_ena ( int );
 void intcon_irqack ( int );
+
+void pll_test ( void );
+void cpu_clock_100 ( void );
 
 /* THE END */
