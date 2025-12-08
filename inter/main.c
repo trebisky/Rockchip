@@ -128,18 +128,33 @@ inter_fixup ( void )
         asm volatile("msr hcr_el2, %0" : : "r" (lval) : "cc");
 }
 
+/* The arguments are in x0, x1 -- so this works.
+ * A lot of serendipity though.
+ */
+void
+try_syscall ( int a, int b )
+{
+        asm volatile("svc #0x123" );
+}
+
 void
 main ( void )
 {
+	int core;
+	unsigned long lval;
+	int aff;
+
 	uart_init ();
 	gpio_init ();
 
 	printf ( "\n" );
-	printf ( "Inter demo for RK3399  1-3-2022\n" );
+	// printf ( "Inter demo for RK3399  1-3-2022\n" );
+	printf ( "Inter demo for RK3399  12-7-2025\n" );
 
 	/* Drop the CPU clock from 600 to 100 Mhz
 	 * to reduce how hot the chip gets.
 	 */
+	printf ( "Reduce CPU clock to 100 Mhz\n" );
 	cpu_clock_100 ();
 
 	/* Added 12-6-2025 */
@@ -154,7 +169,7 @@ main ( void )
 	enable_irq ();
 
 	/* This will check the stack address */
-	show_stack ( 1 );
+	// show_stack ( 1 );
 
 #ifdef MMU_EXPERIMENTS
 	// examine ( 0xfffd0000 );	/* gets synch abort */
@@ -181,6 +196,27 @@ main ( void )
 	//  at EL3).
 	printf ( "Current EL: %h\n", get_el() );
 
+	asm volatile("mrs %0, mpidr_el1" : "=r" (lval) : : "cc");
+	printf ( "MPidr_el1 = %Y\n", lval );
+
+	core = lval & 0xff;
+	printf ( "Core %d\n", core );
+
+	/* See A53 TRM for these */
+	/* I see: 00000000_80000000 */
+	/* the "8" is strange, this is a reserved bit */
+	aff = (lval>>32) & 0xff;
+	printf ( "Aff3 %x\n", aff );	/* cluster-3 */
+	aff = (lval>>16) & 0xff;
+	printf ( "Aff2 %x\n", aff );	/* cluster-2 */
+	aff = (lval>>16) & 0xff;
+	printf ( "Aff1 %x\n", aff );	/* cluster-1 */
+	aff = lval & 0xff;
+	printf ( "Aff0 %x\n", aff );	/* core/cpu */
+
+	/* This should produce a synchronous exception */
+	try_syscall ( 99, 123 );
+
 	// check_shift ();
 
 #ifdef notdef
@@ -190,7 +226,7 @@ main ( void )
 	}
 #endif
 
-	pll_test ();
+	// pll_test ();
 
 	printf ( "Blinking ...\n" );
 	/* This will run the blink demo */

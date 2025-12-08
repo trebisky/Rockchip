@@ -157,6 +157,21 @@ shex8( char *buf, char *end, int val )
         return shex2(buf,end,val);
 }
 
+/* For 64 bit long */
+static char *
+shex16( char *buf, char *end, long val )
+{
+        buf = shex2(buf,end,val>>56);
+        buf = shex2(buf,end,val>>48);
+        buf = shex2(buf,end,val>>40);
+        buf = shex2(buf,end,val>>32);
+
+        buf = shex2(buf,end,val>>24);
+        buf = shex2(buf,end,val>>16);
+        buf = shex2(buf,end,val>>8);
+        return shex2(buf,end,val);
+}
+
 static void
 asnprintf (char *abuf, unsigned int size, const char *fmt, va_list args)
 {
@@ -189,6 +204,11 @@ asnprintf (char *abuf, unsigned int size, const char *fmt, va_list args)
 	    buf = shex8 ( buf, end, va_arg(args,int) );
 	    continue;
 	}
+	/* 64 bit long -- added 12-1-2025 */
+    if ( c == 'Y' ) {
+        buf = shex16 ( buf, end, va_arg(args,long) );
+        continue;
+    }
 	if ( c == 'c' ) {
             PUTCHAR( va_arg(args,int) );
 	    continue;
