@@ -1,0 +1,98 @@
+#!/bin/sh
+
+# Script to fetch files from my clone of the ATF repository
+# 12-8-2025
+#
+# As soon as we use this to copy a file, we should comment
+# the line out, to avoid copying over an edits we might
+# make to the copied file.
+
+ATF="/Projects/OrangePi/r1plus/sources/arm-trusted-firmware"
+#echo $ATF
+
+#cp $ATF/drivers/arm/gic/v3/gicv3_main.c .
+
+#cp $ATF/include/lib/libc/assert.h ./include
+#cp $ATF/include/lib/cassert.h ./include
+#cp $ATF/include/lib/libc/cdefs.h ./include
+#cp $ATF/include/common/debug.h ./include
+#cp $ATF/include/lib/utils_def.h ./include
+#cp $ATF/include/export/lib/utils_def_exp.h ./include
+#cp $ATF/include/lib/libc/stdio.h ./include
+#cp $ATF/include/lib/libc/aarch64/stdio_.h ./include
+#cp $ATF/include/drivers/console.h ./include
+#cp $ATF/include/drivers/console_assertions.h ./include
+#cp $ATF/include/lib/libc/stdarg.h ./include
+#cp $ATF/include/lib/libc/stdint.h ./include
+#cp $ATF/include/lib/libc/aarch64/stdint_.h ./include
+#cp $ATF/include/lib/libc/stdbool.h ./include
+#cp $ATF/include/lib/libc/limits.h ./include
+#cp $ATF/include/lib/libc/aarch64/limits_.h ./include
+#cp $ATF/include/lib/libc/stddef.h ./include
+#cp $ATF/include/lib/libc/aarch64/stddef_.h ./include
+#cp $ATF/include/lib/libc/string.h ./include
+#cp $ATF/include/common/interrupt_props.h ./include
+#cp $ATF/include/lib/spinlock.h ./include
+#cp $ATF/include/lib/mmio.h ./include
+
+#cp $ATF/include/plat/common/platform.h ./include
+#cp $ATF/include/lib/psci/psci.h ./include
+#cp $ATF/include/lib/bakery_lock.h ./include
+#cp $ATF/include/lib/psci/psci_lib.h ./include
+
+# This worries me somewhat
+# What kind of chip dependencies does this gicv3 driver have?
+#
+#cp $ATF/plat/rockchip/rk3399/include/platform_def.h ./include
+#cp $ATF/plat/rockchip/rk3399/include/shared/bl31_param.h ./include
+#cp $ATF/plat/rockchip/rk3399/rk3399_def.h ./include
+#cp $ATF/plat/rockchip/rk3399/include/addressmap.h ./include
+#cp $ATF/plat/rockchip/rk3399/include/shared/addressmap_shared.h ./include
+
+#cp $ATF/include/plat/common/common_def.h ./include
+#cp $ATF/include/common/bl_common.h ./include
+#cp $ATF/include/lib/xlat_tables/xlat_tables_defs.h ./include
+#cp $ATF/include/common/ep_info.h ./include
+#cp $ATF/include/common/param_header.h ./include
+#cp $ATF/include/export/common/param_header_exp.h ./include
+#cp $ATF/include/export/lib/utils_def_exp.h ./include
+#cp $ATF/include/export/common/ep_info_exp.h ./include
+#cp $ATF/include/export/common/bl_common_exp.h ./include
+#cp $ATF/include/export/common/tbbr/tbbr_img_def_exp.h ./include
+#cp $ATF/include/lib/xlat_tables/xlat_mmu_helpers.h ./include
+#cp $ATF/include/drivers/fwu/fwu_metadata.h ./include
+#cp $ATF/include/tools_share/uuid.h ./include
+
+#cp $ATF/include/arch/aarch64/arch.h ./include
+#cp $ATF/include/arch/aarch64/arch_helpers.h ./include
+# There is also /lib/extensions/sysreg128.h (not in include)
+#cp $ATF/include/lib/extensions/sysreg128.h ./include
+
+# We put these in the current directory rather than
+#   in include, editing the source accordingly
+#cp $ATF/include/drivers/arm/gic600_multichip.h .
+#cp $ATF/include/drivers/arm/gicv3.h .
+#cp $ATF/include/drivers/arm/gic_common.h .
+# the above also in drivers/arm/gic/common
+#cp $ATF/drivers/arm/gic/v3/gicv3_private.h .
+#cp $ATF/drivers/arm/gic/common/gic_common_private.h .
+
+#cp $ATF/drivers/arm/gic/v3/gicrv3_helpers.c .
+#cp $ATF/drivers/arm/gic/v3/gicdv3_helpers.c .
+#cp $ATF/drivers/arm/gic/v3/gicv3_helpers.c .
+#cp $ATF/include/drivers/arm/gic600_multichip.h .
+# There is a gic600_multichip.c file to go with this, that we aren't
+# dragging in, so this can probably be eliminated.
+#cp $ATF//drivers/arm/gic/common/gic_common_private.h .
+#cp $ATF/drivers/arm/gic/v3/arm_gicv3_common.c .
+
+#cp $ATF/drivers/arm/gic/v3/gic-x00.c .
+#cp $ATF/include/drivers/arm/arm_gicv3_common.h .
+
+# --------------------------------
+#cp $ATF/lib/locks/exclusive/aarch64/spinlock.S .
+#cp $ATF/include/arch/aarch64/asm_macros.S ./include
+#cp $ATF/include/common/asm_macros_common.S ./include
+#cp $ATF/include/lib/cpus/cpu_ops.h ./include
+
+# THE END

@@ -131,9 +131,97 @@ typedef unsigned long u64;
  *   And more
  */
 
+/* ================================================================================ */
+/* ================================================================================ */
+
+/* XXX - check and think about these */
+// #define NUM_CONFIG	10
+#define NUM_CONFIG	32
+// #define NUM_TARGET	40
+#define NUM_TARGET	128
+// #define NUM_PRIO	40
+#define NUM_PRIO	128
+// #define NUM_MASK	5
+#define NUM_MASK	16
+
+/* See page 519 in the GICv3 manual */
+struct gic500_dist {
+	vu32 ctl;				/* 0x00 */
+	vu32 type;				/* 0x04 */
+	vu32 iid;				/* 0x08 */
+
+	vu32 type2;				/* 0x0c - v4 only */
+	vu32 status;			/* 0x10 - v4 only */
+
+	int __pad0[27];
+
+	vu32	group[NUM_MASK];
+	/* XXX ok to here */
+	int __pad00[16];
+	vu32	eset[NUM_MASK];		/* BG - 0x100 */
+	int __pad1[16];
+	vu32	eclear[NUM_MASK];	/* BG - 0x180 */
+	int __pad2[16];
+	vu32 pset[NUM_MASK];		/* BG - 0x200 */
+	int __pad3[16];
+	vu32 pclear[NUM_MASK];		/* BG - 0x280 */
+	int __pad4[16];
+	vu32 aset[NUM_MASK];		/* BG - 0x300 */
+	int __pad5[16];
+	vu32 aclear[NUM_MASK];		/* BG - 0x380 */
+	int __pad55[16];
+	vu32 prio[NUM_PRIO];		/* BG - 0x400 */
+	int __pad6[128];
+	vu32 target[NUM_TARGET];	/* 0x800 */
+	int __pad7[128];
+	vu32 config[NUM_CONFIG];	/* 0xc00 */
+	int __pad8[32];
+	vu32 ppi_stat;			/* 0xd00 */
+	vu32 spi_stat[15];		/* 0xd04 */
+	int __pad9[112];
+
+	vu32 sgi;			/* 0xf00 */
+	int __pad10[3];
+	vu32	sgi_pclear[4];		/* 0xf10 */
+	vu32	sgi_pset[4];		/* 0xf20 */
+	int __pad11[40];
+
+	vu32 pid4;			/* 0xfd0 */
+	vu32 pid5;			/* 0xfd4 */
+	vu32 pid6;			/* 0xfd8 */
+	vu32 pid7;			/* 0xfdc */
+	vu32 pid0;			/* 0xfe0 */
+	vu32 pid1;			/* 0xfe4 */
+	vu32 pid2;			/* 0xfe8 */
+	vu32 pid3;			/* 0xfec */
+
+	vu32 cid0;			/* 0xff0 */
+	vu32 cid1;			/* 0xff4 */
+	vu32 cid2;			/* 0xff8 */
+	vu32 cid3;			/* 0xffc */
+};
+
+/* Temporary, to verify structure offsets */
+void
+gic_check ( void )
+{
+		struct gic500_dist *gp;
+
+		gp = (struct gic500_dist *) 0;
+
+		printf ( "GIC groupR = %X\n", &gp->group );
+}
+
 void
 gic_init ( void )
 {
+		struct gic500_dist *gp = (struct gic500_dist *) GICD_BASE;
+
+		printf ( "GIC distributor type = %X\n", gp->type );
+		printf ( "GIC distributor type2 = %X\n", gp->type2 );
+		printf ( "GIC distributor iid = %X\n", gp->type2 );
+
+		gic_check ();
 }
 
 void

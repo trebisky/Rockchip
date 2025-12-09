@@ -8,7 +8,11 @@ CROSS_COMPILE = aarch64-linux-gnu-
 
 # -------------------------------------
 
-OBJS = start.o prf.o uart.o gpio.o timer.o gic500.o trap.o mmu.o main.o pll.o
+# OBJS = start.o prf.o uart.o gpio.o timer.o gic500.o trap.o mmu.o main.o pll.o
+#OBJS = start.o prf.o uart.o gpio.o timer.o gic500.o mmu.o main.o pll.o
+
+#OBJS = start.o prf.o uart.o gpio.o timer.o gic500.o main.o pll.o
+OBJS = start.o prf.o uart.o gpio.o timer.o gic.o main.o pll.o
 
 TARGET = $(BOARD).bin
 
@@ -58,6 +62,14 @@ LOAD			=	tools/loader -h64
 
 all: install
 #all: $(TARGET)
+
+# a peculiar trick to always get the make
+# process to visit the gic subdirectory.
+# There may be other ways to do this, but this works
+gic.o:	bogus
+	cd gic ; make
+
+bogus:
 
 install: $(TARGET)
 	cp $(TARGET) /var/lib/tftpboot

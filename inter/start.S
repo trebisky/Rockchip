@@ -15,17 +15,6 @@ start:
 	.globl spin
 spin:	b		spin
 
-// Get our cpu ID
-// unsigned int GetCPUID(void);
-.global GetCPUID
-GetCPUID:
-        mrs     x1, MPIDR_EL1
-        and     x0, x1, #0x3
-        tst     x1, 0xff00
-        beq     1f
-        orr     x0, x0, 4
-1:      ret
-
 // unsigned int GetCurrentSMode(void);
 .global GetCurrentSMode
 GetCurrentSMode:
