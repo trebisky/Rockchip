@@ -15,6 +15,20 @@
  * Tom Trebisky  1-3-2022, 2-14-2022, 12-6-2025
  */
 
+#include "gicv3.h"
+
+#define CPU_0	0
+
+/* These are in gicv3_main.c */
+
+void gicv3_driver_init ( const gicv3_driver_data_t *plat_driver_data );
+
+void gicv3_enable_interrupt(unsigned int id, unsigned int proc_num);
+void gicv3_disable_interrupt(unsigned int id, unsigned int proc_num);
+
+unsigned int gicv3_get_pending_interrupt_id ( void );
+void gicv3_clear_interrupt_pending ( unsigned int id, unsigned int proc_num );
+
 void
 gic_init ( void )
 {
@@ -28,21 +42,26 @@ gic_cpu_init ( void )
 void
 intcon_ena ( int irq )
 {
+		gicv3_enable_interrupt ( irq, CPU_0 );
 }
 
 void
 intcon_dis ( int irq )
 {
+		gicv3_disable_interrupt ( irq, CPU_0 );
 }
 
 int
 intcon_irqwho ( void )
 {
+		return gicv3_get_pending_interrupt_id ();
+
 }
 
 void
 intcon_irqack ( int irq )
 {
+		gicv3_clear_interrupt_pending ( irq, CPU_0 );
 }
 
 /* ====================================================================== */
