@@ -8,7 +8,7 @@ CROSS_COMPILE = aarch64-linux-gnu-
 
 OBJS = gic_compat.o gicv3_main.o gicdv3_helpers.o gicrv3_helpers.o gicv3_helpers.o \
 	gic-x00.o arm_gicv3_common.o \
-	spinlock.o
+	my_core.o cache_helpers.o spinlock.o
 
 # CFLAGS		:=	-g -Wall -Wextra -ffreestanding -fno-builtin -mlittle-endian
 # CFLAGS		:=	-g -Wall -ffreestanding -fno-builtin -mlittle-endian
@@ -39,9 +39,8 @@ OBJCOPY			=	$(CROSS_COMPILE)objcopy
 DUMP			=	$(CROSS_COMPILE)objdump -d
 
 .c.o:
-	#@echo " [CC]   $<"
-	#@$(CC) $< -c -o $@
-	$(CC) $< -c -o $@
+	@echo " [CC]   $<"
+	@$(CC) $< -c -o $@
 
 .S.o:
 	@echo " [AS]   $<"

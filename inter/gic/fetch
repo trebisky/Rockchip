@@ -89,6 +89,8 @@ ATF="/Projects/OrangePi/r1plus/sources/arm-trusted-firmware"
 #cp $ATF/drivers/arm/gic/v3/gic-x00.c .
 #cp $ATF/include/drivers/arm/arm_gicv3_common.h .
 
+#cp $ATF/lib/aarch64/cache_helpers.S .
+
 # --------------------------------
 #cp $ATF/lib/locks/exclusive/aarch64/spinlock.S .
 #cp $ATF/include/arch/aarch64/asm_macros.S ./include
