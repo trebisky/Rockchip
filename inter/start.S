@@ -1,5 +1,8 @@
-/* Extremely simple (and virtually unnecessary)
- * assembly language startup file.
+/* simple assembly language startup file.
+ * - clear bss
+ * - set up vectors
+ *
+ * Tom Trebisy  12-9-2025
  */
 
 	.global start
@@ -7,6 +10,17 @@ start:
 # this is for arm64
 	msr		DAIFSet, #7		// disable interrupts
 
+    // Clear BSS
+	ldr             x1, =__bss_start__
+	ldr             x2, =__bss_end__
+
+clear_bss_loop:
+	str             xzr, [x1], #8
+	cmp             x1, x2
+	bls             clear_bss_loop  // if x1 <= x2 goto clear_bss_loop
+
+# set up vecotrs
+# yes, U-boot sets us running at EL2
 	ldr		x0, =vectors
 	msr		VBAR_el2, x0
 
@@ -15,6 +29,7 @@ start:
 	.globl spin
 spin:	b		spin
 
+// no longer needed
 // unsigned int GetCurrentSMode(void);
 .global GetCurrentSMode
 GetCurrentSMode:

@@ -137,6 +137,11 @@ try_syscall ( int a, int b )
         asm volatile("svc #0x123" );
 }
 
+#ifdef BSS_TEST
+int zero;
+int pickle = 12399;
+#endif
+
 void
 main ( void )
 {
@@ -149,10 +154,25 @@ main ( void )
 
 	printf ( "\n" );
 	// printf ( "Inter demo for RK3399  1-3-2022\n" );
-	printf ( "Inter demo for RK3399  12-7-2025\n" );
+	printf ( "Inter demo for RK3399  12-10-2025\n" );
+
+#ifdef BSS_TEST
+	/* See if global variables get initialized
+	 * as they should.
+	 */
+	printf ( "zero = %d\n", zero );
+	printf ( "pickle = %d\n", pickle );
+	pickle = 321;
+	printf ( "pickle = %d\n", pickle );
+	/* I am pleased and surprised that pickle gets
+	 * handled properly, with no effort on my part.
+	 */
+#endif
 
 	/* Drop the CPU clock from 600 to 100 Mhz
 	 * to reduce how hot the chip gets.
+	 * This had no noticeable effect.
+	 * This chip just runs hot.
 	 */
 	printf ( "Reduce CPU clock to 100 Mhz\n" );
 	cpu_clock_100 ();
@@ -252,17 +272,61 @@ handle_int ( void )
 }
 
 void
-handle_bad ( int who )
+panic ( char *msg )
 {
-    printf ( "Bad exception: %d\n", who );
-    spin ();
+	printf ( "Panic (%s)\n", msg );
+	printf ( "spinning\n" );
+	spin ();
 }
 
 void
+handle_bad ( int who )
+{
+    printf ( "Bad exception: %d\n", who );
+	panic ( "bad exception" );
+}
+
+/* The ESR is the Exception Syndrome Register.
+ * it can be decoded to find out exactly what
+ * sort of synchronous exception occured.
+ * The low 24 bits depend on the cause.
+ * For our SVC instruction, this has the
+ * immediate value encoded in the SVC.
+ * So for our test of SVC I see:
+ * ESR = 56000123
+ * The upper 5 bits are EC, which is the
+ * exception code.
+ * The values used here seem to be a well
+ * guarded secret.
+ */
+void
 handle_sync ( int a, int b )
 {
+	int esr;
+	int ec;
+	int elr;
+
     printf ( "Synch exception: %d %d\n", a, b );
-    // spin ();
+	asm volatile("mrs %0, ESR_el2" : "=r" (esr) : : "cc");
+	printf ( "ESR = %X\n", esr );
+	ec = esr>>26 & 0x3f;
+	printf ( "ESR.EC = %X\n", ec );
+	asm volatile("mrs %0, ELR_el2" : "=r" (elr) : : "cc");
+	printf ( "ELR = %X\n", elr );
+	if ( ec == 0x15 ) {
+		printf ( " SVC instruction: %X\n", esr & 0xffff );
+		return;
+	}
+
+	if ( ec == 0x20 | ec == 0x21 ) {
+		printf ( "Instruction abort: %X\n", ec );
+	} else if ( ec == 0x24 | ec == 0x25 ) {
+		printf ( "data abort: %X\n", ec );
+	} else {
+		printf ( "unknown: %X\n", ec );
+	}
+
+	panic ( "Synch abort" );
 }
 
 /* THE END */

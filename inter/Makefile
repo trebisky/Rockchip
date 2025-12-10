@@ -28,12 +28,11 @@ LDFLAGS		:=	-Bstatic \
 			-Wl,--start-group \
 			-Wl,--end-group \
 			-Wl,--build-id=none \
-			-nostdlib
+			-nostdlib \
+			-Wl,--no-warn-rwx-segments
 
-# Usually this must be added to the LDFLAGS to avoid a stupid
-# and annoying warning, but for this build it does not seem
-# to be needed.
-#			-Wl,--no-warn-rwx-segments
+# The above rwx optionmust be added to the LDFLAGS to avoid a stupid
+# and annoying warning.
 
 CC			=	$(CROSS_COMPILE)gcc $(CFLAGS)
 LD 			=	$(CROSS_COMPILE)gcc $(LDFLAGS)
