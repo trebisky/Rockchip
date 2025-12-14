@@ -178,13 +178,15 @@ main ( void )
 	cpu_clock_100 ();
 
 	/* Added 12-6-2025 */
+	printf ( "Fixing HCR so EL2 gets interrupts\n" );
 	inter_fixup ();
 
-	gic_init ();
-	gic_cpu_init ();
+	intcon_gic_init ();
+	intcon_gic_cpu_init ();
 
 	timer_init ();
 
+	printf ( "Enable interrupts\n" );
 	// INT_unlock ();
 	enable_irq ();
 
@@ -219,6 +221,10 @@ main ( void )
 	asm volatile("mrs %0, mpidr_el1" : "=r" (lval) : : "cc");
 	printf ( "MPidr_el1 = %Y\n", lval );
 
+	// No such register (there is a vmpidr_el2)
+	// asm volatile("mrs %0, mpidr_el2" : "=r" (lval) : : "cc");
+	// printf ( "MPidr_el2 = %Y\n", lval );
+
 	core = lval & 0xff;
 	printf ( "Core %d\n", core );
 
@@ -236,6 +242,9 @@ main ( void )
 
 	/* This should produce a synchronous exception */
 	try_syscall ( 99, 123 );
+
+	/* Should produce an SGI interrupt */
+	intcon_sgi ( 0 );
 
 	// check_shift ();
 
@@ -261,10 +270,11 @@ main ( void )
  */
 
 void
-handle_int ( void )
+handle_irq ( void )
 {
 	int irq;
 
+	printf ( "IRQ interrupt\n" );
 	irq = intcon_irqwho ();
 	printf ( "IRQ Interrupt for IRQ %d\n", irq );
 
@@ -272,7 +282,22 @@ handle_int ( void )
 }
 
 void
-panic ( char *msg )
+handle_fiq ( void )
+{
+	int irq;
+
+	printf ( "FIQ interrupt\n" );
+	irq = intcon_irqwho ();
+	printf ( "FIQ Interrupt for IRQ %d\n", irq );
+
+	intcon_irqack ( irq );
+}
+
+/* We call this rkpanic() to avoid conflict with
+ * the panic() macro in the gic driver setup.
+ */
+void
+rkpanic ( char *msg )
 {
 	printf ( "Panic (%s)\n", msg );
 	printf ( "spinning\n" );
@@ -283,7 +308,7 @@ void
 handle_bad ( int who )
 {
     printf ( "Bad exception: %d\n", who );
-	panic ( "bad exception" );
+	rkpanic ( "bad exception" );
 }
 
 /* The ESR is the Exception Syndrome Register.
@@ -306,7 +331,9 @@ handle_sync ( int a, int b )
 	int ec;
 	int elr;
 
-    printf ( "Synch exception: %d %d\n", a, b );
+	// The args only are interesting for SVC
+    // printf ( "Synch exception: %d %d\n", a, b );
+    printf ( "Synch exceptionn\n", a, b );
 	asm volatile("mrs %0, ESR_el2" : "=r" (esr) : : "cc");
 	printf ( "ESR = %X\n", esr );
 	ec = esr>>26 & 0x3f;
@@ -315,6 +342,7 @@ handle_sync ( int a, int b )
 	printf ( "ELR = %X\n", elr );
 	if ( ec == 0x15 ) {
 		printf ( " SVC instruction: %X\n", esr & 0xffff );
+		printf ( " SVC args: %d %d\n", a, b );
 		return;
 	}
 
@@ -326,7 +354,7 @@ handle_sync ( int a, int b )
 		printf ( "unknown: %X\n", ec );
 	}
 
-	panic ( "Synch abort" );
+	rkpanic ( "Synch abort" );
 }
 
 /* THE END */

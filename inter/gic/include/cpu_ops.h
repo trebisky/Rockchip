@@ -98,8 +98,10 @@
 #endif /* __aarch64__ */
 
 #ifndef __ASSEMBLER__
-#include <lib/cassert.h>
-#include <lib/spinlock.h>
+// #include <lib/cassert.h>
+#include <cassert.h>
+// #include <lib/spinlock.h>
+#include <spinlock.h>
 
 struct cpu_ops {
 	unsigned long midr;

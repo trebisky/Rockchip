@@ -78,6 +78,8 @@ gic500.o: gic500.c rk3399_ints.h
 $(BOARD).elf: $(OBJS)
 	@echo " [LD]   $(BOARD).elf"
 	@$(LD) $(OBJS) -o $(BOARD).elf
+	@echo " [DIS]   $(BOARD).dis"
+	@$(DUMP) -d $(BOARD).elf -z >$(BOARD).dis
 
 $(TARGET): $(BOARD).elf
 	@#echo " [IMG]  $(TARGET)

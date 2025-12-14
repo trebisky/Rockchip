@@ -12,9 +12,14 @@
 // #include <common/debug.h>
 #include <debug.h>
 
+#define PLAT_LOG_LEVEL_ASSERT 100
+
 #ifndef PLAT_LOG_LEVEL_ASSERT
 #define PLAT_LOG_LEVEL_ASSERT	LOG_LEVEL
 #endif
+
+/* TJT */
+#define ENABLE_ASSERTIONS 123
 
 #if ENABLE_ASSERTIONS
 # if PLAT_LOG_LEVEL_ASSERT >= LOG_LEVEL_INFO
@@ -27,9 +32,11 @@
 #endif /* ENABLE_ASSERTIONS */
 
 #if PLAT_LOG_LEVEL_ASSERT >= LOG_LEVEL_INFO
-void __dead2 __assert(const char *file, unsigned int line);
+// void __dead2 __assert(const char *file, unsigned int line);
+void __assert(char *file, unsigned int line);
 #else
-void __dead2 __assert(void);
+// void __dead2 __assert(void);
+void __assert(void);
 #endif
 
 #endif /* ASSERT_H */

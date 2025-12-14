@@ -30,7 +30,8 @@
 #include "protos.h"
 
 #define PRINTF_BUF_SIZE 128
-static void asnprintf (char *abuf, unsigned int size, const char *fmt, va_list args);
+// static void asnprintf (char *abuf, unsigned int size, const char *fmt, va_list args);
+void asnprintf (char *abuf, unsigned int size, const char *fmt, va_list args);
 
 void
 printf ( char *fmt, ... )
@@ -172,7 +173,8 @@ shex16( char *buf, char *end, long val )
         return shex2(buf,end,val);
 }
 
-static void
+// static void
+void
 asnprintf (char *abuf, unsigned int size, const char *fmt, va_list args)
 {
     char *buf, *end;

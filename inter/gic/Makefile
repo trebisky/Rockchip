@@ -10,6 +10,11 @@ OBJS = gic_compat.o gicv3_main.o gicdv3_helpers.o gicrv3_helpers.o gicv3_helpers
 	gic-x00.o arm_gicv3_common.o \
 	my_core.o cache_helpers.o spinlock.o
 
+# We don't use this (see the base directory)
+NOT_OBJS = gicv3_base.o
+#CFLAGS		+= -DLOG_LEVEL=30 -DUSE_GIC_DRIVER=3
+# The file gicv3_main.c complains without the DRIVER=3
+
 # CFLAGS		:=	-g -Wall -Wextra -ffreestanding -fno-builtin -mlittle-endian
 # CFLAGS		:=	-g -Wall -ffreestanding -fno-builtin -mlittle-endian
 CFLAGS		:=	-g -ffreestanding -fno-builtin -mlittle-endian
@@ -17,21 +22,9 @@ CFLAGS		+= -march=armv8-a+crc
 CFLAGS		+= -mtune=cortex-a53
 CFLAGS		+= -nostdinc
 CFLAGS		+= -I. -I./include
-
-# These are for a final link
-FINAL_LDFLAGS		:=	-Bstatic \
-			-Tspl.lds \
-			-Wl,--start-group \
-			-Wl,--end-group \
-			-Wl,--build-id=none \
-			-nostdlib
-
-LDFLAGS		:=	-Bstatic
-
-# Usually this must be added to the LDFLAGS to avoid a stupid
-# and annoying warning, but for this build it does not seem
-# to be needed.
-#			-Wl,--no-warn-rwx-segments
+CFLAGS		+= -DLOG_LEVEL=30 -DUSE_GIC_DRIVER=3
+# see debug.h for LOG_LEVEL
+# it should be a multiple of 10.
 
 CC			=	$(CROSS_COMPILE)gcc $(CFLAGS)
 LD 			=	$(CROSS_COMPILE)gcc $(LDFLAGS)

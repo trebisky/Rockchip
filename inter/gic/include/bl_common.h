@@ -54,6 +54,8 @@
 #define FIQ_AARCH32			U(0xe)
 #define SERROR_AARCH32			U(0xf)
 
+#ifdef TJT_SAYS_NO
+
 /*
  * Mapping to connect linker symbols from .ld.S with their counterparts
  * from .scat for the BL31 image
@@ -95,7 +97,7 @@
 #define __SPMD_LP_DESCS_END__		Load$$__SPMD_LP_DESCS__$$Limit
 #endif
 #define __RW_START__			Load$$LR$$LR_RW_DATA$$Base
-#define __RW_END__				Load$$LR$$LR_END$$Base
+#define __RW_END__			Load$$LR$$LR_END$$Base
 #define __SPM_SHIM_EXCEPTIONS_START__	Load$$__SPM_SHIM_EXCEPTIONS__$$Base
 #define __SPM_SHIM_EXCEPTIONS_END__	Load$$__SPM_SHIM_EXCEPTIONS_EPILOGUE__$$Base
 #define __STACKS_START__		Load$$__STACKS__$$Base
@@ -116,23 +118,14 @@ IMPORT_SYM(uintptr_t, __TEXT_END__,		BL_CODE_END);
 IMPORT_SYM(uintptr_t, __RODATA_START__,		BL_RO_DATA_BASE);
 IMPORT_SYM(uintptr_t, __RODATA_END__,		BL_RO_DATA_END);
 #else
-/* TJT */
-/* We don't have or need these */
-#ifdef notdef
 IMPORT_SYM(uintptr_t, __RO_START__,		BL_CODE_BASE);
 IMPORT_SYM(uintptr_t, __RO_END__,		BL_CODE_END);
 #endif
-#endif
-
 #if SEPARATE_NOBITS_REGION
 IMPORT_SYM(uintptr_t, __NOBITS_START__,		BL_NOBITS_BASE);
 IMPORT_SYM(uintptr_t, __NOBITS_END__,		BL_NOBITS_END);
 #endif
-
-/* TJT */
-#ifdef notdef
 IMPORT_SYM(uintptr_t, __RW_END__,		BL_END);
-#endif
 
 #if defined(IMAGE_BL1)
 IMPORT_SYM(uintptr_t, __BL1_ROM_END__,		BL1_ROM_END);
@@ -177,6 +170,11 @@ IMPORT_SYM(uintptr_t, __PER_CPU_UNIT_END__,	PER_CPU_UNIT_END)
 IMPORT_SYM(uintptr_t, __COHERENT_RAM_START__,	BL_COHERENT_RAM_BASE);
 IMPORT_SYM(uintptr_t, __COHERENT_RAM_END__,	BL_COHERENT_RAM_END);
 #endif
+#endif /*__ASSEMBLER__*/
+
+#endif /* TJT_SAYS_NO */
+
+#ifndef __ASSEMBLER__
 
 /*******************************************************************************
  * Structure used for telling the next BL how much of a particular type of

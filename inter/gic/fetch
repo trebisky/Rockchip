@@ -51,13 +51,13 @@ ATF="/Projects/OrangePi/r1plus/sources/arm-trusted-firmware"
 
 #cp $ATF/include/plat/common/common_def.h ./include
 #cp $ATF/include/common/bl_common.h ./include
+#cp $ATF/include/export/common/bl_common_exp.h ./include
 #cp $ATF/include/lib/xlat_tables/xlat_tables_defs.h ./include
 #cp $ATF/include/common/ep_info.h ./include
 #cp $ATF/include/common/param_header.h ./include
 #cp $ATF/include/export/common/param_header_exp.h ./include
 #cp $ATF/include/export/lib/utils_def_exp.h ./include
 #cp $ATF/include/export/common/ep_info_exp.h ./include
-#cp $ATF/include/export/common/bl_common_exp.h ./include
 #cp $ATF/include/export/common/tbbr/tbbr_img_def_exp.h ./include
 #cp $ATF/include/lib/xlat_tables/xlat_mmu_helpers.h ./include
 #cp $ATF/include/drivers/fwu/fwu_metadata.h ./include
@@ -90,6 +90,30 @@ ATF="/Projects/OrangePi/r1plus/sources/arm-trusted-firmware"
 #cp $ATF/include/drivers/arm/arm_gicv3_common.h .
 
 #cp $ATF/lib/aarch64/cache_helpers.S .
+
+# I almost missed this -- and all of its dependent files
+# and as it turns out, I don't need all this anyway.
+#cp $ATF/drivers/arm/gic/v3/gicv3_base.c .
+#cp $ATF/include/drivers/arm/gic.h .
+#cp $ATF/include/lib/utils.h ./include
+#cp $ATF/include/plat/arm/common/plat_arm.h ./include
+#cp $ATF/include/common/desc_image_load.h ./include
+#cp $ATF/include/export/common/tbbr/tbbr_img_def_exp.h ./include
+#cp $ATF/include/drivers/arm/tzc_common.h ./include
+#cp $ATF/include/lib/el3_runtime/cpu_data.h ./include
+#cp $ATF/include/bl31/ehf.h ./include
+#cp $ATF/include/lib/el3_runtime/aarch64/context.h ./include
+#cp $ATF/include/lib/el3_runtime/context_el1.h ./include
+#cp $ATF/include/lib/el3_runtime/context_el2.h ./include
+#cp $ATF/include/lib/extensions/sysreg128.h ./include
+#cp $ATF/include/lib/el3_runtime/simd_ctx.h ./include
+#cp $ATF/include/lib/per_cpu/per_cpu.h ./include
+#cp $ATF/include/lib/per_cpu/per_cpu_defs.h ./include
+#cp $ATF/include/lib/gpt_rme/gpt_rme.h ./include
+#cp $ATF/include/lib/xlat_tables/xlat_tables_compat.h ./include
+#cp $ATF/include/lib/xlat_tables/xlat_tables.h ./include
+#cp $ATF/include/lib/xlat_tables/xlat_tables_defs.h ./include
+#cp $ATF/include/lib/xlat_tables/xlat_mmu_helpers.h ./include
 
 # --------------------------------
 #cp $ATF/lib/locks/exclusive/aarch64/spinlock.S .
