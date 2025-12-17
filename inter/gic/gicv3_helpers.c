@@ -96,6 +96,19 @@ void gicv3_rdistif_base_addrs_probe(uintptr_t *rdistif_base_addrs,
 
 	assert(rdistif_base_addrs != NULL);
 
+	// TJT
+	printf ( "gicv3_rdistif_base_addrs_probe - rdistif_num = %d\n", rdistif_num );
+	/* I see this:
+		gicv3_rdistif_base_addrs_probe - rdistif_num = 6
+		gicv3_rdistif_base_addrs_probe - proc_num, base = 0 FEF00000
+		gicv3_rdistif_base_addrs_probe - proc_num, base = 1 FEF20000
+		gicv3_rdistif_base_addrs_probe - proc_num, base = 2 FEF40000
+		gicv3_rdistif_base_addrs_probe - proc_num, base = 3 FEF60000
+		gicv3_rdistif_base_addrs_probe - proc_num, base = 4 FEF80000
+		gicv3_rdistif_base_addrs_probe - proc_num, base = 5 FEFA0000
+	*/
+
+
 	/*
 	 * Iterate over the Redistributor frames. Store the base address of each
 	 * frame in the platform provided array. Use the "Processor Number"
@@ -113,6 +126,7 @@ void gicv3_rdistif_base_addrs_probe(uintptr_t *rdistif_base_addrs,
 				TYPER_PROC_NUM_MASK;
 		}
 
+		printf ( "gicv3_rdistif_base_addrs_probe - proc_num, base = %d %X\n", proc_num, rdistif_base );
 		if (proc_num < rdistif_num) {
 			rdistif_base_addrs[proc_num] = rdistif_base;
 		}

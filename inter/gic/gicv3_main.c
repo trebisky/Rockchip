@@ -136,10 +136,14 @@ void __init gicv3_driver_init(const gicv3_driver_data_t *plat_driver_data)
 	gic_version >>= PIDR2_ARCH_REV_SHIFT;
 	gic_version &= PIDR2_ARCH_REV_MASK;
 
+	// TJT
+	printf ( "GIC version: %d\n", gic_version );
+
 	/* Check GIC version */
 #if !GIC_ENABLE_V4_EXTN
 	assert(gic_version == ARCH_REV_GICV3);
 #endif
+
 	/*
 	 * Find out whether the GIC supports the GICv2 compatibility mode.
 	 * The ARE_S bit resets to 0 if supported
@@ -1018,8 +1022,17 @@ void gicv3_enable_interrupt(unsigned int id, unsigned int proc_num)
 	assert(gicv3_driver_data->rdistif_base_addrs != NULL);
 
 	// TJT
+	printf ( "GIC enable int %d, gicd base = %X\n",
+			id, gicv3_driver_data->gicd_base );
 	printf ( "GIC enable int %d, rdist base = %X\n",
 			id, gicv3_driver_data->rdistif_base_addrs[proc_num] );
+	/* I see this:
+		Enable IRQ 113 in GIC
+		GIC enable int 113, gicd base = FEE00000
+		GIC enable int 113, rdist base = FEF00000
+		GIC enable int 113, multichip gicd base = FEE00000
+		For SPI 113, multichip dist base = FEE00000
+	*/
 
 	/*
 	 * Ensure that any shared variable updates depending on out of band
@@ -1029,6 +1042,7 @@ void gicv3_enable_interrupt(unsigned int id, unsigned int proc_num)
 	if (!is_valid_interrupt(id)) {
 		panic();
 	}
+
 	/* Check interrupt ID */
 	if (IS_SGI_PPI(id)) {
 		/* For SGIs: 0-15, PPIs: 16-31 and EPPIs: 1056-1119 */
@@ -1037,6 +1051,8 @@ void gicv3_enable_interrupt(unsigned int id, unsigned int proc_num)
 	} else {
 		/* For SPIs: 32-1019 and ESPIs: 4096-5119 */
 		gicd_base = gicv3_get_multichip_base(id, gicv3_driver_data->gicd_base);
+		printf ( "GIC enable int %d, multichip gicd base = %X\n",
+			id, gicd_base );
 		gicd_set_isenabler(gicd_base, id);
 		// TJT
 		printf ( "For SPI %d, multichip dist base = %X\n", id, gicd_base );
@@ -1393,6 +1409,7 @@ unsigned int gicv3_deactivate_priority(unsigned int mask)
 	return old_mask;
 }
 
+#ifdef TJT_SAYS_NO
 /*******************************************************************************
  * This function delegates the responsibility of discovering the corresponding
  * Redistributor frames to each CPU itself. It is a modified version of
@@ -1466,6 +1483,7 @@ int gicv3_rdistif_probe(const uintptr_t gicr_frame)
 #endif
 	return 0; /* Found matching GICR frame */
 }
+#endif /* TJT_SAYS_NO */
 
 /******************************************************************************
  * This function checks the interrupt ID and returns true for SGIs, (E)PPIs

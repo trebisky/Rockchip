@@ -241,9 +241,11 @@ main ( void )
 	printf ( "Aff0 %x\n", aff );	/* core/cpu */
 
 	/* This should produce a synchronous exception */
+	printf ( "Try a syscall via SVC\n" );
 	try_syscall ( 99, 123 );
 
 	/* Should produce an SGI interrupt */
+	printf ( "Try an SGI interrupt\n" );
 	intcon_sgi ( 0 );
 
 	// check_shift ();
@@ -257,6 +259,7 @@ main ( void )
 
 	// pll_test ();
 
+	printf ( "\n" );
 	printf ( "Blinking ...\n" );
 	/* This will run the blink demo */
 	blinker ();

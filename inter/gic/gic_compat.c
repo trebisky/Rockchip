@@ -146,17 +146,17 @@ gic_cpu_checker ( void )
 			printf ( "I Cache -not- enabled\n" );
 
 		lreg = read_tcr_el2();
-		printf ( "Tcr_el2 = %Y\n", lreg );
+		printf ( "TCR_el2 = %Y\n", lreg );
 		lreg = read_ttbr0_el2();
-		printf ( "TTbr0_el2 = %Y\n", lreg );
+		printf ( "TTBR0_el2 = %Y\n", lreg );
 
 		// This spits out 1024 lines
 		// dump_mmu ( (u32 *) lreg );
 
 		// This gives a synch abort
 		// lreg = read_ttbr1_el2();
+		// (there is no TTBR1 register for el2, only for el1)
 		// printf ( "TTbr1_el2 = %Y\n", lreg );
-		/* The TTBRx can be 128 registers if FEAT is active */
 }
 
 /* For testing */
@@ -165,6 +165,7 @@ all_sgi ( void )
 {
 		int i;
 
+		printf ( "Enable all SGI interrupts\n" );
 		for ( i=0; i<16; i++ )
 			gicv3_enable_interrupt ( i, CPU_0 );
 }
