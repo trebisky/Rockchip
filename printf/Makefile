@@ -42,6 +42,7 @@ LOAD			=	tools/loader -h64
 .c.o:
 	@echo " [CC]   $<"
 	@$(CC) $< -c -o $@
+	$(CC) $< -c -o $@
 
 .S.o:
 	@echo " [CC]   $<"

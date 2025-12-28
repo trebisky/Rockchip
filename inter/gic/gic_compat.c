@@ -103,11 +103,11 @@ typedef unsigned int u32;
 #define MMU_LINES	(1*1024)
 
 static void
-dump_mmu ( u32 *base )
+dump_mmu ( u32 *base, int n )
 {
 		int i;
 
-		for ( i=0; i<MMU_LINES; i++ ) {
+		for ( i=0; i<n; i++ ) {
 			printf ( "%X:  %X %X %X %X\n",
 				base, base[0], base[1], base[2], base[3] );
 			base += 4;
@@ -151,7 +151,12 @@ gic_cpu_checker ( void )
 		printf ( "TTBR0_el2 = %Y\n", lreg );
 
 		// This spits out 1024 lines
-		// dump_mmu ( (u32 *) lreg );
+		// dump_mmu ( (u32 *) lreg, MMU_LINES );
+		// dump_mmu ( (u32 *) lreg, 8 );
+
+		lreg = read_vbar_el2();
+		printf ( "VBAR_el2 = %Y\n", lreg );
+		dump_mmu ( (u32 *) lreg, 128 );
 
 		// This gives a synch abort
 		// lreg = read_ttbr1_el2();

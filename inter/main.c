@@ -71,6 +71,17 @@ get_el(void)
         return val >> 2;
 }
 
+static inline int
+is_el2 ( void )
+{
+        unsigned int val;
+
+        asm volatile("mrs %0, CurrentEL" : "=r" (val) : : "cc");
+		if ( val == 2<<2 )
+			return 1;
+        return 0;
+}
+
 // I'm not sure what I was up to here.
 static inline void
 check_shift(void)
@@ -128,6 +139,40 @@ inter_fixup ( void )
         asm volatile("msr hcr_el2, %0" : : "r" (lval) : "cc");
 }
 
+/*
+ * SCTLR_EL1/SCTLR_EL2/SCTLR_EL3 bits definitions
+ */
+#define CR_M		(1 << 0)	/* MMU enable			*/
+#define CR_A		(1 << 1)	/* Alignment abort enable	*/
+#define CR_C		(1 << 2)	/* Dcache enable		*/
+#define CR_SA		(1 << 3)	/* Stack Alignment Check Enable	*/
+#define CR_I		(1 << 12)	/* Icache enable		*/
+#define CR_WXN		(1 << 19)	/* Write Permision Imply XN	*/
+#define CR_EE		(1 << 25)	/* Exception (Big) Endian	*/
+
+// See what happens when we disable the I cache */
+void
+zap_cache ( void )
+{
+		unsigned long lval;
+
+		asm volatile("mrs %0, sctlr_el2" : "=r" (lval) : : "cc");
+		printf ( "old sctlr: %Y\n", lval );
+        // lval &= ~CR_I;
+        // lval &= ~CR_M;
+		printf ( "new sctlr: %Y\n", lval );
+        asm volatile("msr sctlr_el2, %0" : : "r" (lval) : "cc");
+}
+
+void
+show_sp ( void )
+{
+		unsigned long sp;
+		
+		asm volatile("mov %0, sp" : "=r" (sp) : : "cc");
+		printf ( "SP: %Y\n", sp );
+}
+
 /* The arguments are in x0, x1 -- so this works.
  * A lot of serendipity though.
  */
@@ -155,6 +200,11 @@ main ( void )
 	printf ( "\n" );
 	// printf ( "Inter demo for RK3399  1-3-2022\n" );
 	printf ( "Inter demo for RK3399  12-10-2025\n" );
+
+	show_sp ();
+
+	printf ( "Zap I cache\n" );
+	zap_cache ();
 
 #ifdef BSS_TEST
 	/* See if global variables get initialized
@@ -240,6 +290,7 @@ main ( void )
 	aff = lval & 0xff;
 	printf ( "Aff0 %x\n", aff );	/* core/cpu */
 
+#ifdef NOT_RIGHT_NOW
 	/* This should produce a synchronous exception */
 	printf ( "Try a syscall via SVC\n" );
 	try_syscall ( 99, 123 );
@@ -247,8 +298,11 @@ main ( void )
 	/* Should produce an SGI interrupt */
 	printf ( "Try an SGI interrupt\n" );
 	intcon_sgi ( 0 );
+#endif
 
 	// check_shift ();
+	if ( is_el2() )
+		printf ( "Running in EL2\n" );
 
 #ifdef notdef
 	for ( ;; ) {
